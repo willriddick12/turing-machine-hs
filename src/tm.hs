@@ -1,59 +1,134 @@
+-- IMPORTS
+import Data.List
+import Data.Char
 
-
-data Symbol = Char | None
-type Alphabet = [Symbol]
+type Symbol = Char 
+type Alphabet = [Symbol] 
 
 -- A tape is a list of symbols, a head symbol, and symbols
 type Tape = ([Symbol], Symbol, [Symbol]) 
 
 type State = String
-data StateList = [State]
+type StateList = [State]
 
-data Direction = L | R | None
-data Transition = (State, [Symbol], Symbol, Direction, State)
+data Direction = L | R | S -- left, right, stay respectively
+type Transition = (State, [Symbol], Symbol, Direction, State)
 type TransitionTable = [Transition]
 
-data Specification = (Alphabet, StateList, TransitionTable) | Error String
-data TuringMachine = (Specification, Tape)
+type Specification = (Alphabet, StateList, TransitionTable) 
+type TuringMachine = (Specification, Tape)
+
+type ErrMsg = String
 
 {-
-    lexer: parses a specification file into a list of tokens
+HELPER FUNCTIONS
 -}
-lexer :: String -> Specification 
+split :: Eq a => a -> [a] -> [[a]]
+split _ [] = [[]]
+split delim lst =
+    let (first, remainder) = span (/= delim) lst
+     in first : case remainder of
+        [] -> []
+        (_:xs) -> split delim xs
+
+duplicates :: Eq a => [a] -> Bool
+duplicates [] = False
+duplicates (x:xs) = elem x xs || duplicates xs
+
+
+
+{-
+lexer: parses a specification file into a list of tokens
+-}
+{-
+lexer :: String -> Either Specification ErrMsg
 lexer s | take 9 s == "alphabet:" 
     = let (grab, rest) = span (\x -> x /= "\n") (drop 9 s) 
           (_, sta, tra) = lexer rest
-       in (lexAlphabet grab, sta, tra) 
+       in Left (lexAlphabet grab, sta, tra) 
 lexer s | take 7 s == "states:" 
     = let (grab, rest) = span (\x -> x /= "\n") (drop 9 s) 
           (alp, _, tra) = lexer rest 
-       in (alp, lexState grab, tra) 
+       in Left (alp, lexStates grab : "accept" : "reject", tra) 
 lexer s | take 14 s == "transitions:\n" 
-    = let (alp, sta, _) = lexer rest
-       in (alp, sta, lexTransitions rest) 
-
+    = let rest = drop 14 s
+          (alp, sta, _) = lexer rest
+       in Left (alp, sta, lexTransitions rest) 
+lexer s = Right "Invalid specification file"
+-}
 
 
 {-
 lexAlphabet: parses a csv of symbols converting them to an Alphabet
 -}
-lexAlphabet :: String -> Alphabet 
-lexAlphabet "" = []
-lexAlphabet (x:xs) | x == ',' = lexAlphabet xs
-                   | otherwise = x : lexAlphabet xs
+lexAlphabet :: String -> Either Alphabet ErrMsg
+lexAlphabet "" = Right ("No alphabet specified")
+lexAlphabet s  
+        | (any (\x -> length x > 1) stringList) = Right ("Alphabet contains symbol with more than one character" ) 
+        | (any (not . isAlphaNum) charList) = Right ("Alphabet contains non-alphanumeric symbol" )
+        | (duplicates charList) = Right ("Alphabet contains duplicate symbols")
+        | otherwise = Left charList
+        where 
+            stringList = (split ',' s) 
+            charList = map head stringList 
+
+
 
 {-
 lexStates: parses a csv of states
 -}
-lexStates :: String -> [State]
-lexStates "" = []
-lexAlphabet (x:xs) = let (name,rest) = span (\x -> x /= ',') (x:xs) 
-                      in name : lexAlphabet rest
+lexStates :: String -> Either StateList ErrMsg
+lexStates "" = Left []
+lexStates s 
+    | (isUpper (head name)) = Right ("State name must start with a lowercase character: " ++ name)
+    | (not (isAlpha (head name))) = Right ("State name must start with an alphabetic character: " ++ name)
+    | (any (not . isAlphaNum) name) = Right ("State name must be alphanumeric: " ++ name)
+    | null rest = case name `elem` existingStates of
+        True -> Right ("Duplicate state name found: " ++ name)
+        False -> Left [name]
+    | otherwise = case rest of
+        ',':xs -> case lexStates xs of
+                Left states -> if name `elem` states
+                    then Right ("Duplicate state name found: " ++ name)
+                    else Left (name : states)
+                Right err -> Right err
+        _ -> Right "Invalid state list format: missing comma separator"
+    where 
+        (name, rest) = break (== ',') s
+        existingStates = case lexStates rest of
+            Left states -> states
+            Right _ -> []
+
+
 
 {-
-lexTransitions: parses transitions
+lexTransitions: parses all transitions using lexTransition as a helper
 -}
+{-
 lexTransitions :: String -> TransitionTable
+lexTransitions "" = []
+lexTransitions s = let (current, rest) = span (\x -> x /= '\n') s
+                    in lexTransition current : lexTransitions rest
+-}
+
+
+{-
+lexTransition: parses a single transition 
+data Transition = (State, [Symbol], Symbol, Direction, State)
+-}
+{-
+lexTransition :: String -> (String, String, String, String, String)
+lexTransition (x:xs) 
+    | x == '|' = lexTransition xs
+    | x == ' ' = lexTransition xs
+    | otherwise = let 
+        (state, four) = span (\x -> x /= '|') (x:xs)
+        (states, three) = span (\x -> x /= '|') four 
+        (write, two) = span (\x -> x /= '|') three
+        (dir, one) = span (\x -> x /= '|') two
+        (next, end) = span (\x -> x /= '|') one
+        in (state, states, write, dir, next)
+-}
 
 
 {-
@@ -75,6 +150,7 @@ q2 | b | _ | > | q0
 q2 | _ | _ | _ | reject
 -}
 
+{-
 main :: IO ()
 main = do
     putStrLn "Input a specification file: "
@@ -82,3 +158,4 @@ main = do
         lexer inp
 
         main
+-}
