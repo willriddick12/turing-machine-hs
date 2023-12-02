@@ -20,6 +20,8 @@ type TuringMachine = (Specification, Tape)
 
 type ErrMsg = String
 
+let specification1 = (['a','b','c'], ["q0","q1","q2"], [("q0", ['a'], '_', R, "q1"), ("q0", ['b','c'], '_', R, "q0"), ("q0", ['_'], '_', S, "reject"), ("q1", ['b'], '_', R, "q2"), ("q1", ['a'], '_', R, "q1"), ("q1", ['c'], '_', R, "q0"), ("q1", ['_'], '_', S, "reject"), ("q2", ['c'], '_', R, "accept"), ("q2", ['a'], '_', R, "q1"), ("q2", ['b'], '_', R, "q0"), ("q2", ['_'], '_', S, "reject")
+
 {-
 HELPER FUNCTIONS
 -}
