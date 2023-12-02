@@ -49,21 +49,21 @@ lexer s | take 9 s == "alphabet:"
 lexer s | take 7 s == "states:" 
     = let (grab, rest) = span (\x -> x /= "\n") (drop 9 s) 
           (alp, _, tra) = lexer rest 
-       in Left (alp, lexStates grab : "accept" : "reject", tra) 
+       in Left (alp, parseStates grab : "accept" : "reject", tra) 
 lexer s | take 14 s == "transitions:\n" 
     = let rest = drop 14 s
           (alp, sta, _) = lexer rest
-       in Left (alp, sta, lexTransitions rest) 
+       in Left (alp, sta, parseTransitions rest) 
 lexer s = Right "Invalid specification file"
 -}
 
 
 {-
-lexAlphabet: parses a csv of symbols converting them to an Alphabet
+parseAlphabet: parses a csv of symbols converting them to an Alphabet
 -}
-lexAlphabet :: String -> Either Alphabet ErrMsg
-lexAlphabet "" = Right ("No alphabet specified")
-lexAlphabet s  
+parseAlphabet :: String -> Either Alphabet ErrMsg
+parseAlphabet "" = Right ("No alphabet specified")
+parseAlphabet s  
         | (any (\x -> length x > 1) stringList) = Right ("Alphabet contains symbol with more than one character" ) 
         | (any (not . isAlphaNum) charList) = Right ("Alphabet contains non-alphanumeric symbol" )
         | (duplicates charList) = Right ("Alphabet contains duplicate symbols")
@@ -75,11 +75,11 @@ lexAlphabet s
 
 
 {-
-lexStates: parses a csv of states
+parseStates: parses a csv of states
 -}
-lexStates :: String -> Either StateList ErrMsg
-lexStates "" = Left []
-lexStates s 
+parseStates :: String -> Either StateList ErrMsg
+parseStates "" = Left []
+parseStates s 
     | (isUpper (head name)) = Right ("State name must start with a lowercase character: " ++ name)
     | (not (isAlpha (head name))) = Right ("State name must start with an alphabetic character: " ++ name)
     | (any (not . isAlphaNum) name) = Right ("State name must be alphanumeric: " ++ name)
@@ -87,7 +87,7 @@ lexStates s
         True -> Right ("Duplicate state name found: " ++ name)
         False -> Left [name]
     | otherwise = case rest of
-        ',':xs -> case lexStates xs of
+        ',':xs -> case parseStates xs of
                 Left states -> if name `elem` states
                     then Right ("Duplicate state name found: " ++ name)
                     else Left (name : states)
@@ -95,40 +95,54 @@ lexStates s
         _ -> Right "Invalid state list format: missing comma separator"
     where 
         (name, rest) = break (== ',') s
-        existingStates = case lexStates rest of
+        existingStates = case parseStates rest of
             Left states -> states
             Right _ -> []
 
 
 
 {-
-lexTransitions: parses all transitions using lexTransition as a helper
+parseTransitions: parses all transitions using parseTransition as a helper
+
+parseTransition: parses a single transition
 -}
 {-
-lexTransitions :: String -> TransitionTable
-lexTransitions "" = []
-lexTransitions s = let (current, rest) = span (\x -> x /= '\n') s
-                    in lexTransition current : lexTransitions rest
+parseTransitions :: String -> TransitionTable
+parseTransitions "" = []
+parseTransitions s = let (current, rest) = span (\x -> x /= '\n') s
+                    in parseTransition current : lexTransitions rest
 -}
 
 
-{-
-lexTransition: parses a single transition 
-data Transition = (State, [Symbol], Symbol, Direction, State)
--}
-{-
-lexTransition :: String -> (String, String, String, String, String)
-lexTransition (x:xs) 
-    | x == '|' = lexTransition xs
-    | x == ' ' = lexTransition xs
-    | otherwise = let 
-        (state, four) = span (\x -> x /= '|') (x:xs)
-        (states, three) = span (\x -> x /= '|') four 
-        (write, two) = span (\x -> x /= '|') three
-        (dir, one) = span (\x -> x /= '|') two
-        (next, end) = span (\x -> x /= '|') one
-        in (state, states, write, dir, next)
--}
+parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
+parseTransition s 
+    | (not (stateExists curState)) = Right ("State: '" ++ curState ++ "' does not exist")
+    | (not (stateExists nexState)) = Right ("State: '" ++ nexState ++ "' does not exist")
+    | (not (symbolExists readSym)) = Right ("Symbol: '" ++ readSym ++ "' does not exist")
+    | (any (symbolExists (lexAlphabet headSym))) = Right ("Symbol in list: '" ++ headSym ++ "' does not exist")
+    | otherwise = Left (curState, lexAlphabet headSym, readSym, lexDirection dir, nexState)
+    where
+        [curState, headSym, readSym, dir, nexState] = map (trim . dropWhileEnd isSpace) $ wordsWhen (== '|') s
+        trim = f . f where f = reverse . dropWhile isSpace
+
+wordsWhen :: (Char -> Bool) -> String -> [String]
+wordsWhen p s = case dropWhile p s of
+    "" -> []
+    s' -> w : wordsWhen p s''
+        where (w, s'') = break p s'
+
+stateExists :: State -> StateList -> Bool
+stateExists state stateList = elem state stateList
+
+symbolExists :: Symbol -> Alphabet -> Bool
+symbolExists sym alph = elem sym alph
+
+lexDirection :: String -> Either Direction ErrMsg
+lexDirection s = case s of
+    ">" -> Left R
+    "<" -> Left L
+    "_" -> Left S
+    x   -> Right ("Invalid direction: '" ++ x ++ "'. Must be one of: '<', '>', '_'")
 
 
 {-
