@@ -173,3 +173,33 @@ main = do
 
         main
 -}
+
+-- Define the Turing machine transition function
+runTM :: String -> TuringMachine -> Bool
+runTM input ((alphabet, states, transitions), tape) =
+    let (_, _, result) = executeTransition transitions tape (head states) input
+    in result == Accept
+
+-- Execute a single transition step
+executeTransition :: TransitionTable -> Tape -> State -> String -> (Tape, State, State)
+executeTransition _ tape state [] = (tape, state, state)
+executeTransition transitions (left, current, right) state (x:xs) =
+    let (newTape, newState, finalState) = executeSingleTransition transitions (left, current, right) state x
+    in executeTransition transitions newTape newState xs
+
+-- Execute a single transition based on current state and symbol
+executeSingleTransition :: TransitionTable -> Tape -> State -> Symbol -> (Tape, State, State)
+executeSingleTransition transitions tape@(left, current, right) state symbol =
+    case lookup (state, [symbol], current, R, "") transitions of
+        Just (newState, newSymbol, direction, nextState) ->
+            let (newLeft, newCurrent, newRight) = case direction of
+                    R -> case right of
+                        [] -> (left ++ [newSymbol], Blank, [])
+                        _ -> (left ++ [newSymbol], head right, tail right)
+                    L -> case left of
+                        [] -> ([], Blank, current:right)
+                        _ -> (init left, last left, current:right)
+                    S -> (left, newSymbol, right)
+                newTape = (newLeft, newCurrent, newRight)
+            in (newTape, nextState, nextState)
+        Nothing -> (tape, state, "reject") -- No transition found, move to reject state
