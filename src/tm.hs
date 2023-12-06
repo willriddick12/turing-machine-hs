@@ -125,29 +125,55 @@ parseTransitions s = let (current, rest) = span (\x -> x /= '\n') s
 -}
 
 
---parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
 {-
 parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
 parseTransition str stateList alphabet 
     | length parts /= 5 = Right ("Invalid transition: '" ++ str ++ "'")
-    | Just err <- find isRight [state, symbol, writeSym, dir, nextState] = Right (fromRight err)
-    | otherwise = Left (fromLeft state, fromLeft symbol, fromLeft writeSym, fromLeft dir, fromLeft nextState)
+    | isRight state || isRight readSyms || isRight writeSym || isRight dir || isRight nextState = Right $ "Invalid transition: '" ++ str ++ "'"
+    | otherwise = Left (fromLeft state, fromLeft readSyms, fromLeft writeSym, fromLeft dir, fromLeft nextState)
     where 
         parts = split '|' str
-        state = lexState (trim (parts !! 0)) stateList
-        symbol = parseAlphabet (trim (parts !! 1)) 
-        writeSym = lexSymbol (trim (parts !! 2))
+        state = lexState stateList (trim (parts !! 0)) 
+        readSyms = lexSymbols alphabet (trim (parts !! 1)) 
+        writeSym = lexSymbol alphabet (trim (parts !! 2)) 
         dir = lexDirection (trim (parts !! 3))
-        nextState = lexState (trim (parts !! 4)) stateList
--}
---q0 | a   | _ | > | q1
---q0 | b,c | _ | > | q0
+        nextState = lexState stateList (trim (parts !! 4)) 
+        -}
 
-lexSymbol :: String -> Either Symbol ErrMsg
-lexSymbol s
-    | length s /= 1 = Right $ "Symbol must be one character: '" ++ s ++ "'"
-    | s == "_" = Left None
-    | otherwise = Left (Sym (head s))
+parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
+parseTransition str stateList alphabet 
+    | length parts /= 5 = Right ("Invalid transition: '" ++ str ++ "'")
+    | otherwise = case (state, readSyms, writeSym, dir, nextState) of
+        (Left st, Left rs, Left ws, Left d, Left ns) -> Left (st, rs, ws, d, ns)
+        (Right st, _, _, _, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ st)
+        (_, Right rs, _, _, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ rs)
+        (_, _, Right ws, _, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ ws)
+        (_, _, _, Right d, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ d)
+        (_, _, _, _, Right ns) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ ns)
+    where 
+        parts = split '|' str
+        state = lexState stateList (trim (parts !! 0)) 
+        readSyms = lexSymbols alphabet (trim (parts !! 1)) 
+        writeSym = lexSymbol alphabet (trim (parts !! 2)) 
+        dir = lexDirection (trim (parts !! 3))
+        nextState = lexState stateList (trim (parts !! 4))
+
+lexSymbols :: Alphabet -> String -> Either [Symbol] ErrMsg
+lexSymbols alphabet s =
+  case find isRight symbols of
+    Just err -> Right (fromRight err)
+    Nothing -> Left (lefts symbols)
+  where
+    symbols =  map (lexSymbol alphabet) (filter (not . null) (split ',' s))
+    isRight (Right _) = True
+    isRight _ = False
+    fromRight (Right x) = x
+
+lexSymbol :: Alphabet -> String -> Either Symbol ErrMsg
+lexSymbol alphabet s | length s /= 1 = Right $ "Symbol must be one character: '" ++ s ++ "'"
+lexSymbol _ ['_'] = Left None
+lexSymbol alphabet [s] | Sym s `elem` alphabet = Left (Sym s)
+lexSymbol _ [s] = Right $ "Symbol not in alphabet: '" ++ [s] ++ "'"
 
 lexDirection :: String -> Either Direction ErrMsg
 lexDirection s = case s of
@@ -156,8 +182,8 @@ lexDirection s = case s of
     "_" -> Left S
     x   -> Right ("Invalid direction: '" ++ x ++ "'. Must be one of the following: '<', '>', '_'")
 
-lexState :: String -> StateList -> Either State ErrMsg
-lexState s stateList = case s of
+lexState :: StateList -> String -> Either State ErrMsg
+lexState stateList s = case s of
     "accept" -> Left Accept
     "reject" -> Left Reject
     state ->
