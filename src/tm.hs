@@ -117,28 +117,18 @@ parseTransitions: parses all transitions using parseTransition as a helper
 
 parseTransition: parses a single transition
 -}
-{-
-parseTransitions :: String -> TransitionTable
-parseTransitions "" = []
-parseTransitions s = let (current, rest) = span (\x -> x /= '\n') s
-                    in parseTransition current : lexTransitions rest
--}
+parseTransitions :: String -> StateList -> Alphabet -> Either TransitionTable ErrMsg
+parseTransitions "" _ _ = Right []  
+parseTransitions s stateList alphabet =
+    case parsedCurrent of
+        Left transition -> case parseTransitions rest stateList alphabet of
+            Left transitions -> Left (transition : transitions)
+            Right errMsg -> Right errMsg
+        Right errMsg -> Right errMsg 
+    where
+        (current, rest) = span (/= ';') s
+        parsedCurrent = parseTransition current stateList alphabet
 
-
-{-
-parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
-parseTransition str stateList alphabet 
-    | length parts /= 5 = Right ("Invalid transition: '" ++ str ++ "'")
-    | isRight state || isRight readSyms || isRight writeSym || isRight dir || isRight nextState = Right $ "Invalid transition: '" ++ str ++ "'"
-    | otherwise = Left (fromLeft state, fromLeft readSyms, fromLeft writeSym, fromLeft dir, fromLeft nextState)
-    where 
-        parts = split '|' str
-        state = lexState stateList (trim (parts !! 0)) 
-        readSyms = lexSymbols alphabet (trim (parts !! 1)) 
-        writeSym = lexSymbol alphabet (trim (parts !! 2)) 
-        dir = lexDirection (trim (parts !! 3))
-        nextState = lexState stateList (trim (parts !! 4)) 
-        -}
 
 parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
 parseTransition str stateList alphabet 
