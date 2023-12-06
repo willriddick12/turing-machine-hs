@@ -5,7 +5,7 @@ import Data.Either
 
 type ErrMsg = String
 
-data Symbol = Char | None deriving (Show, Eq) -- None is the blank symbol, it will not write to the tape
+data Symbol = Sym Char | None deriving (Show, Eq) -- None is the blank symbol, it will not write to the tape
 type Alphabet = [Symbol] 
 
 -- A tape is a list of symbols, a head symbol, and symbols
@@ -71,17 +71,15 @@ lexer s = Right "Invalid specification file"
 parseAlphabet: parses a csv of symbols converting them to an Alphabet
 -}
 parseAlphabet :: String -> Either Alphabet ErrMsg
-parseAlphabet "" = Right "No alphabet specified"
+parseAlphabet "" = Right ("No alphabet specified")
 parseAlphabet s  
-    | Just longSymbol <- find (\x -> length x > 1) stringList = Right $ "Alphabet contains symbol with more than one character: " ++ longSymbol
-    | Just nonAlphaNum <- find (not . isAlphaNum) charList = Right $ "Alphabet contains non-alphanumeric symbol: " ++ [nonAlphaNum]
-    | duplicates charList = Right "Alphabet contains duplicate symbols"
-    | otherwise = Left charList
-    where 
-        stringList = filter (not . null) $ split ',' s 
-        charList = map head stringList 
-
-
+        | Just err <- find (\x -> length x > 1) stringList = Right ("Alphabet contains symbol with more than one character: '" ++ err ++ "'")
+        | Just err <- find (not . isAlphaNum) charList = Right ("Alphabet contains non-alphanumeric symbol: '" ++ [err] ++ "'") 
+        | (duplicates charList) = Right "Alphabet contains duplicate symbols"
+        | otherwise = Left (map Sym charList)
+        where 
+            stringList = filter (not . null) (split ',' s) 
+            charList = map head stringList 
 
 {-
 parseStates: parses a csv of states
@@ -128,22 +126,28 @@ parseTransitions s = let (current, rest) = span (\x -> x /= '\n') s
 
 
 --parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
+{-
 parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
-parseTransition str slist alph =
-    let [state, symbols, writeSymbol, direction, nextState] = split '|' str
-     in [lexState (trim state), parseAlphabet (trim symbols), lexSymbol (trim writeSymbol), lexDirection (trim direction), lexState (trim nextState)]
-      
-
-
+parseTransition str stateList alphabet 
+    | length parts /= 5 = Right ("Invalid transition: '" ++ str ++ "'")
+    | Just err <- find isRight [state, symbol, writeSym, dir, nextState] = Right (fromRight err)
+    | otherwise = Left (fromLeft state, fromLeft symbol, fromLeft writeSym, fromLeft dir, fromLeft nextState)
+    where 
+        parts = split '|' str
+        state = lexState (trim (parts !! 0)) stateList
+        symbol = parseAlphabet (trim (parts !! 1)) 
+        writeSym = lexSymbol (trim (parts !! 2))
+        dir = lexDirection (trim (parts !! 3))
+        nextState = lexState (trim (parts !! 4)) stateList
+-}
 --q0 | a   | _ | > | q1
 --q0 | b,c | _ | > | q0
 
-
 lexSymbol :: String -> Either Symbol ErrMsg
-lexSymbol s = case s of
-    length s > 1 -> Right ("Symbol must be one character: '" ++ s ++ "'")
-    "_" -> Left None
-    x -> Left x
+lexSymbol s
+    | length s /= 1 = Right $ "Symbol must be one character: '" ++ s ++ "'"
+    | s == "_" = Left None
+    | otherwise = Left (Sym (head s))
 
 lexDirection :: String -> Either Direction ErrMsg
 lexDirection s = case s of
@@ -167,6 +171,8 @@ lexState s stateList = case s of
 {-
     simulateTMWithLimit
 -}
+
+{-
 simulateTMWithLimit :: TuringMachine -> State -> Int -> Either ErrMsg (State, Tape)
 simulateTMWithLimit tm@(spec, tape) currentState steps
   | steps <= 0 = Left "Exceeded maximum steps"
@@ -230,7 +236,7 @@ main = do
       else case simulateTMWithLimit tm initialState maxSteps of
         Left errMsg -> putStrLn $ "Error: " ++ errMsg
         Right (finalState, finalTape) -> putStrLn $ outputResult (Right (finalState, finalTape))
-
+-}
 {-
 alphabet:a,b,c
 states:q0,q1,q2
@@ -250,6 +256,6 @@ q2 | b | _ | > | q0
 q2 | _ | _ | _ | rejectp
 -}
 
-specification :: Specification
-specification = (['a', 'b', 'c'], [Normal "q0", Normal "q1", Normal "q2", Reject, Accept], [ (Normal "q0", ['a'], '_', R, Normal "q1"),(Normal "q0", ['b', 'c'], '_', R, Normal "q0"),(Normal "q0", ['_'], '_', S, Reject),(Normal "q1", ['b'], '_', R, Normal "q2"),(Normal "q1", ['a'], '_', R, Normal "q1"),(Normal "q1", ['c'], '_', R, Normal "q0"),(Normal "q1", ['_'], '_', S, Reject),(Normal "q2", ['c'], '_', R, Accept),(Normal "q2", ['a'], '_', R, Normal "q1"),(Normal "q2", ['b'], '_', R, Normal "q0"),(Normal "q2", ['_'], '_', S, Reject)])
+--specification :: Specification
+--specification = (['a', 'b', 'c'], [Normal "q0", Normal "q1", Normal "q2", Reject, Accept], [ (Normal "q0", ['a'], '_', R, Normal "q1"),(Normal "q0", ['b', 'c'], '_', R, Normal "q0"),(Normal "q0", ['_'], '_', S, Reject),(Normal "q1", ['b'], '_', R, Normal "q2"),(Normal "q1", ['a'], '_', R, Normal "q1"),(Normal "q1", ['c'], '_', R, Normal "q0"),(Normal "q1", ['_'], '_', S, Reject),(Normal "q2", ['c'], '_', R, Accept),(Normal "q2", ['a'], '_', R, Normal "q1"),(Normal "q2", ['b'], '_', R, Normal "q0"),(Normal "q2", ['_'], '_', S, Reject)])
 
