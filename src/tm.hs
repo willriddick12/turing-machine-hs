@@ -5,12 +5,12 @@ import Data.Either
 
 type ErrMsg = String
 
-type Symbol = Char 
+data Symbol = Char | None deriving (Show, Eq) -- None is the blank symbol, it will not write to the tape
 type Alphabet = [Symbol] 
 
 -- A tape is a list of symbols, a head symbol, and symbols
 type Tape = ([Symbol], Symbol, [Symbol]) 
-data Direction = L | R | S -- left, right, stay respectively
+data Direction = L | R | S deriving (Show, Eq) -- left, right, stay respectively
 
 data State = Normal String | Accept | Reject deriving (Show, Eq)
 type StateList = [State]
@@ -24,7 +24,7 @@ type TuringMachine = (Specification, Tape)
 
 
 {-
-GENERAL HELPER FUNCTIONS
+    GENERAL HELPER FUNCTIONS
 -}
 -- Splits a list on a delimiter
 split :: Eq a => a -> [a] -> [[a]]
@@ -35,40 +35,14 @@ split delim lst =
         [] -> []
         (_:xs) -> split delim xs
 
+-- Trim leading and trailing spaces from a string
+trim :: String -> String
+trim = f . f where f = reverse . dropWhile (== ' ')
+
 -- Checks if a list contains duplicates
 duplicates :: Eq a => [a] -> Bool
 duplicates [] = False
 duplicates (x:xs) = elem x xs || duplicates xs
--- Utility function to find a transition in the TransitionTable
-findTransition :: State -> Symbol -> TransitionTable -> Maybe Transition
-findTransition state symbol = find (\(st, symbols, _, _, _) -> st == state && symbol `elem` symbols)
-
-moveTape :: Direction -> Tape -> Tape
-moveTape L (ls, m, rs) = case ls of
-  [] -> ([], ' ', m:rs)
-  (l:ls':lss) -> ([l], ls', m:rs)
-moveTape R (ls, m, rs) = case rs of
-  [] -> (ls ++ [m], ' ', [])
-  (r:rs') -> (ls ++ [m], r, rs')
-moveTape S tape = tape
-
--- Function to simulate the Turing machine
-simulateTM :: TuringMachine -> State -> Either ErrMsg State
-simulateTM ((alphabet, states, transitions), tape) currentState =
-  let (left, currentSymbol, right) = tape
-  in case findTransition currentState currentSymbol transitions of
-    Just (_, _, writeSymbol, direction, nextState) ->
-      let newTape = moveTape direction (left, writeSymbol, right)
-      in simulateTM ((alphabet, states, transitions), newTape) nextState
-    Nothing -> if currentState == Reject then Left "False'" else Right currentState
-
-validateTransitionTable :: Specification -> Bool
-validateTransitionTable (alphabet, states, transitions) =
-  all (\s -> all (\a -> any (\(_, sym, _, _, _) -> s == Normal "" || a `elem` sym) transitions) alphabet) states
-
--- Trim leading and trailing spaces from a string
-trim :: String -> String
-trim = f . f where f = reverse . dropWhile (== ' ')
 
 
 {-
@@ -91,33 +65,23 @@ lexer s | take 14 s == "transitions:\n"
 lexer s = Right "Invalid specification file"
 -}
 
-simulateTMWithLimit :: TuringMachine -> State -> Int -> Either ErrMsg (State, Tape)
-simulateTMWithLimit tm@(spec, tape) currentState steps
-  | steps <= 0 = Left "Exceeded maximum steps"
-  | currentState == Accept || currentState == Reject = Right (currentState, tape)
-  | otherwise =
-      let (alphabet, states, transitions) = spec
-          (left, currentSymbol, right) = tape
-      in case findTransition currentState currentSymbol transitions of
-        Just (_, _, writeSymbol, direction, nextState) ->
-          let newTape = moveTape direction (left, writeSymbol, right)
-          in simulateTMWithLimit (spec, newTape) nextState (steps - 1)
-        Nothing -> Left "Invalid transition"
-
-validateInput :: Alphabet -> Tape -> Bool
-validateInput alphabet (left, currentSymbol, right) =
-  all (`elem` alphabet) (left ++ [currentSymbol] ++ right)
-
-setInitialTape :: String -> Alphabet -> Tape
-setInitialTape input alphabet = ([], head input, tail input)
-
-displayTape :: Tape -> String
-displayTape (left, currentSymbol, right) = reverse left ++ [currentSymbol] ++ right
 
 
-outputResult :: Either ErrMsg (State, Tape) -> String
-outputResult (Left errMsg) = "Error: " ++ errMsg
-outputResult (Right (state, tape)) = "Final state: " ++ show state ++ "\nFinal tape: " ++ displayTape tape
+{-
+parseAlphabet: parses a csv of symbols converting them to an Alphabet
+-}
+parseAlphabet :: String -> Either Alphabet ErrMsg
+parseAlphabet "" = Right "No alphabet specified"
+parseAlphabet s  
+    | Just longSymbol <- find (\x -> length x > 1) stringList = Right $ "Alphabet contains symbol with more than one character: " ++ longSymbol
+    | Just nonAlphaNum <- find (not . isAlphaNum) charList = Right $ "Alphabet contains non-alphanumeric symbol: " ++ [nonAlphaNum]
+    | duplicates charList = Right "Alphabet contains duplicate symbols"
+    | otherwise = Left charList
+    where 
+        stringList = filter (not . null) $ split ',' s 
+        charList = map head stringList 
+
+
 
 {-
 parseStates: parses a csv of states
@@ -149,6 +113,7 @@ stateValid states (Normal s)
 
         
 
+
 {-
 parseTransitions: parses all transitions using parseTransition as a helper
 
@@ -161,31 +126,31 @@ parseTransitions s = let (current, rest) = span (\x -> x /= '\n') s
                     in parseTransition current : lexTransitions rest
 -}
 
-{-
+
+--parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
 parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
-parseTransition s stateList alphabet
-    | (not (stateExists curState stateList)) = Right ("State: '" ++ curState ++ "' does not exist")
-    | (not (stateExists nextState stateList)) = Right ("State: '" ++ nextState ++ "' does not exist")
-    | (not (symbolExists writeSym alphabet)) = Right ("Symbol: '" ++ writeSym ++ "' does not exist")
-    | not (all (`symbolExists` alphabet) readSymList) = Right ("One or more symbols in list do not exist in the alphabet")
-    | Right errMsg <- readSymList = Right errMsg
-    | Right errMsg <- lexDir = Right errMsg
-    | otherwise = Left (curState, readSymList, writeSym, lexDir, nextState)
-    where
-        [curState, readSym, writeSym, dir, nextState] = map (trim . dropWhileEnd isSpace) $ wordsWhen (== '|') s
-        trim = f . f where f = reverse . dropWhile isSpace
-        readSymList = parseAlphabet readSym
-        lexDir = lexDirection dir
-        -}
+parseTransition str slist alph =
+    let [state, symbols, writeSymbol, direction, nextState] = split '|' str
+     in [lexState (trim state), parseAlphabet (trim symbols), lexSymbol (trim writeSymbol), lexDirection (trim direction), lexState (trim nextState)]
+      
 
 
+--q0 | a   | _ | > | q1
+--q0 | b,c | _ | > | q0
+
+
+lexSymbol :: String -> Either Symbol ErrMsg
+lexSymbol s = case s of
+    length s > 1 -> Right ("Symbol must be one character: '" ++ s ++ "'")
+    "_" -> Left None
+    x -> Left x
 
 lexDirection :: String -> Either Direction ErrMsg
 lexDirection s = case s of
     ">" -> Left R
     "<" -> Left L
     "_" -> Left S
-    x   -> Right ("Invalid direction: '" ++ x ++ "'. Must be one of: '<', '>', '_'")
+    x   -> Right ("Invalid direction: '" ++ x ++ "'. Must be one of the following: '<', '>', '_'")
 
 lexState :: String -> StateList -> Either State ErrMsg
 lexState s stateList = case s of
@@ -195,6 +160,76 @@ lexState s stateList = case s of
         if Normal state `elem` stateList
             then Left (Normal state)
             else Right ("State not found: '" ++ state ++ "'")
+
+
+
+
+{-
+    simulateTMWithLimit
+-}
+simulateTMWithLimit :: TuringMachine -> State -> Int -> Either ErrMsg (State, Tape)
+simulateTMWithLimit tm@(spec, tape) currentState steps
+  | steps <= 0 = Left "Exceeded maximum steps"
+  | currentState == Accept || currentState == Reject = Right (currentState, tape)
+  | otherwise =
+      let (alphabet, states, transitions) = spec
+          (left, currentSymbol, right) = tape
+      in case findTransition currentState currentSymbol transitions of
+        Just (_, _, writeSymbol, direction, nextState) ->
+          let newTape = moveTape direction (left, writeSymbol, right)
+          in simulateTMWithLimit (spec, newTape) nextState (steps - 1)
+        Nothing -> Left "Invalid transition"
+
+
+-- Utility function to find a transition in the TransitionTable
+findTransition :: State -> Symbol -> TransitionTable -> Maybe Transition
+findTransition state symbol = find (\(st, symbols, _, _, _) -> st == state && symbol `elem` symbols)
+
+moveTape :: Direction -> Tape -> Tape
+moveTape L (ls, m, rs) = case ls of
+  [] -> ([], ' ', m:rs)
+  (l:ls':lss) -> ([l], ls', m:rs)
+moveTape R (ls, m, rs) = case rs of
+  [] -> (ls ++ [m], ' ', [])
+  (r:rs') -> (ls ++ [m], r, rs')
+moveTape S tape = tape
+
+validateTransitionTable :: Specification -> Bool
+validateTransitionTable (alphabet, states, transitions) =
+  all (\s -> all (\a -> any (\(_, sym, _, _, _) -> s == Normal "" || a `elem` sym) transitions) alphabet) states
+
+validateInput :: Alphabet -> Tape -> Bool
+validateInput alphabet (left, currentSymbol, right) =
+  all (`elem` alphabet) (left ++ [currentSymbol] ++ right)
+
+setInitialTape :: String -> Alphabet -> Tape
+setInitialTape input alphabet = ([], head input, tail input)
+
+displayTape :: Tape -> String
+displayTape (left, currentSymbol, right) = reverse left ++ [currentSymbol] ++ right
+
+outputResult :: Either ErrMsg (State, Tape) -> String
+outputResult (Left errMsg) = "Error: " ++ errMsg
+outputResult (Right (state, tape)) = "Final state: " ++ show state ++ "\nFinal tape: " ++ displayTape tape
+
+
+
+main :: IO ()
+main = do
+  let (alphabet, states, transitions) = specification
+      inputTape = "aaaaaccbac" -- Input tape here
+      initialTape = setInitialTape inputTape alphabet
+      tm = (specification, initialTape)
+      initialState = Normal "q0"
+      maxSteps = 1000
+
+  if not (validateTransitionTable specification)
+    then putStrLn "Transition table is incomplete"
+    else if not (validateInput alphabet initialTape)
+      then putStrLn "Input tape contains symbols not in the alphabet"
+      else case simulateTMWithLimit tm initialState maxSteps of
+        Left errMsg -> putStrLn $ "Error: " ++ errMsg
+        Right (finalState, finalTape) -> putStrLn $ outputResult (Right (finalState, finalTape))
 
 {-
 alphabet:a,b,c
@@ -218,19 +253,3 @@ q2 | _ | _ | _ | rejectp
 specification :: Specification
 specification = (['a', 'b', 'c'], [Normal "q0", Normal "q1", Normal "q2", Reject, Accept], [ (Normal "q0", ['a'], '_', R, Normal "q1"),(Normal "q0", ['b', 'c'], '_', R, Normal "q0"),(Normal "q0", ['_'], '_', S, Reject),(Normal "q1", ['b'], '_', R, Normal "q2"),(Normal "q1", ['a'], '_', R, Normal "q1"),(Normal "q1", ['c'], '_', R, Normal "q0"),(Normal "q1", ['_'], '_', S, Reject),(Normal "q2", ['c'], '_', R, Accept),(Normal "q2", ['a'], '_', R, Normal "q1"),(Normal "q2", ['b'], '_', R, Normal "q0"),(Normal "q2", ['_'], '_', S, Reject)])
 
-main :: IO ()
-main = do
-  let (alphabet, states, transitions) = specification
-      inputTape = "aaaaaccbac" -- Input tape here
-      initialTape = setInitialTape inputTape alphabet
-      tm = (specification, initialTape)
-      initialState = Normal "q0"
-      maxSteps = 1000
-
-  if not (validateTransitionTable specification)
-    then putStrLn "Transition table is incomplete"
-    else if not (validateInput alphabet initialTape)
-      then putStrLn "Input tape contains symbols not in the alphabet"
-      else case simulateTMWithLimit tm initialState maxSteps of
-        Left errMsg -> putStrLn $ "Error: " ++ errMsg
-        Right (finalState, finalTape) -> putStrLn $ outputResult (Right (finalState, finalTape))
