@@ -4,6 +4,7 @@ import Data.List
 import Data.Char
 import Data.Either
 import Data.Maybe
+import Control.Monad
 
 data Token = MetaData | Transitions | AlphaSec | StatesSec | InvalidInput String deriving (Show, Eq)
 type ErrMsg = String
@@ -72,19 +73,64 @@ tokenizeLine line
 tokenizeInput :: String -> [Token]
 tokenizeInput = map tokenizeLine . lines
 
-parseAlphabet :: String -> Alphabet
+{- parseAlphabet :: String -> Alphabet
 parseAlphabet = map toSymbol . filter (/= "") . mySplitOn ","
   where
     toSymbol :: String -> Symbol
     toSymbol [c] = Sym c
-    toSymbol _   = None
+    toSymbol _   = None -}
+
+parseAlphabet :: String -> Either ErrMsg Alphabet
+parseAlphabet input = do
+    let symbols = filter (not . null) $ mySplitOn "," input
+    checkDuplicates symbols
+    checkSymbolLength symbols
+    traverse toSymbol symbols
+
+toSymbol :: String -> Either ErrMsg Symbol
+toSymbol [c] = Right (Sym c)
+toSymbol _   = Left "Invalid symbol format"
+
+checkDuplicates :: Eq a => [a] -> Either ErrMsg ()
+checkDuplicates lst =
+    if duplicates lst
+        then Left "Duplicate found"
+        else Right ()
+
+checkSymbolLength :: [String] -> Either ErrMsg ()
+checkSymbolLength lst =
+    if all (\s -> length s == 1) lst
+        then Right ()
+        else Left "Each symbol in the alphabet must be a single character"
 
 
 
-parseStates :: String -> StateList
-parseStates = map Normal . mySplitOn "," . last . words
+{-parseStates :: String -> StateList
+parseStates = map Normal . mySplitOn "," . last . words -}
 
-parseTransition :: String -> Transition
+parseStates :: String -> Either ErrMsg StateList
+parseStates input = do
+    let stateNames = mySplitOn "," $ last $ words input
+    checkDuplicates stateNames
+    traverse validateState stateNames
+
+validateState :: String -> Either ErrMsg State
+validateState state
+    | state == "accept" = Right Accept
+    | isValidState state = Right (Normal state)
+    | otherwise = Left "Invalid state name"
+
+isValidState :: String -> Bool
+isValidState state
+    | state == "accept" || state == "reject" = False  -- "accept" and "reject" are not allowed
+    | otherwise =
+        not (null state) &&
+        isLower (head state) &&
+        all (\c -> isAlphaNum c && not (isSpace c)) (tail state)
+ 
+
+
+{- parseTransition :: String -> Transition
 parseTransition line = case mySplitOn " | " line of
     [fromState, readSym, writeSym, direction, toState] ->
         let readSymbols = case readSym of
@@ -101,23 +147,85 @@ parseTransition line = case mySplitOn " | " line of
                 _   -> S
         in (Normal fromState, readSymbols, writeSymbol, moveDirection, Normal toState)
     _ -> error $ "Invalid transition format: " ++ line
+ -}
+
+parseTransition :: String -> Either ErrMsg Transition
+parseTransition line = do
+    let parts = mySplitOn " | " line
+    when (length parts /= 5) $ Left "Invalid transition format"
+
+    let [fromState, readSym, writeSym, direction, toState] = map trim parts
+
+    fromState' <- validateState fromState
+    readSymbols <- validateReadSymbols readSym
+    writeSymbol <- validateWriteSymbol writeSym
+    moveDirection <- validateDirection direction
+    toState' <- validateState toState
+
+    return (fromState', readSymbols, writeSymbol, moveDirection, toState')
+
+validateReadSymbols :: String -> Either ErrMsg [Symbol]
+validateReadSymbols readSym
+    | readSym == "_" = Right []
+    | all (\c -> isAlphaNum c || c == ',') readSym = traverse toSymbol (mySplitOn "," readSym)
+    | otherwise = Left "Invalid read symbol format"
+
+
+validateWriteSymbol :: String -> Either ErrMsg Symbol
+validateWriteSymbol writeSym
+    | writeSym == "_" = Right None
+    | length writeSym == 1 && isAlphaNum (head writeSym) = toSymbol writeSym
+    | otherwise = Left "Invalid write symbol format"
 
 
 
-parseTransitions :: [String] -> TransitionTable
+validateDirection :: String -> Either ErrMsg Direction
+validateDirection dir
+    | dir == ">" = Right R
+    | dir == "<" = Right L
+    | dir == "_" = Right S
+    | otherwise = Left "Invalid move direction"
+
+
+
+{- parseTransitions :: [String] -> TransitionTable
 parseTransitions = map parseTransition
+ -}
 
-parseSpecification :: String -> TuringMachine
-parseSpecification spec =
+parseTransitions :: String -> Either ErrMsg TransitionTable
+parseTransitions input = traverse parseTransition (lines input)
+
+{- parseSpecification :: String -> Either ErrMsg TuringMachine
+parseSpecification spec = do
     let sections = lines spec
-        alphabet = parseAlphabet (sections !! 0)
-        states = parseStates (sections !! 1)
-        transitionLines = dropWhile (\line -> not ("transitions:" `isPrefixOf` line)) sections
-        transitions = parseTransitions (tail transitionLines)  -- Skip the "transitions:" line
-    in TM alphabet states transitions
+
+    -- Parse alphabet
+    let alphabetSection = takeWhile (\line -> not ("alphabet:" `isPrefixOf` line)) sections
+    let remainingSectionsAfterAlphabet = drop (length alphabetSection) sections
+    alphabet <- parseAlphabet (unlines alphabetSection)
+
+    -- Parse states
+    let statesSection = takeWhile (\line -> not ("states:" `isPrefixOf` line)) remainingSectionsAfterAlphabet
+    let remainingSectionsAfterStates = drop (length statesSection) remainingSectionsAfterAlphabet
+    states <- parseStates (unlines statesSection)
+
+    -- Parse transitions
+    let transitionLines = unlines $ dropWhile (\line -> not ("transitions:" `isPrefixOf` line)) remainingSectionsAfterStates
+    transitions <- parseTransitions transitionLines
+
+    return $ TM alphabet states transitions -}
 
 
 
+
+
+
+
+mtrans :: String
+mtrans = 
+    "q0 | a | _ | > | q1 \n" ++ 
+    "q0 | _ | _ | > | q0 \n" ++
+    "q1 | b | _ | > | q2"
 
 containsabc :: String
 containsabc = 
