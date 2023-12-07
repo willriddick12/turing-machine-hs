@@ -25,17 +25,8 @@ type TransitionTable = [Transition]
 --type Specification = (Alphabet, StateList, TransitionTable) 
 --type TuringMachine = (Specification, Tape)
 data TuringMachine = TM Alphabet StateList TransitionTable deriving (Show)
-    GENERAL HELPER FUNCTIONS
+    {-GENERAL HELPER FUNCTIONS
 -}
--- Splits a list on a delimiter
-split :: Eq a => a -> [a] -> [[a]]
-split _ [] = [[]]
-split delim lst =
-    let (first, remainder) = span (/= delim) lst
-     in first : case remainder of
-        [] -> []
-        (_:xs) -> split delim xs
-
 mySplitOn :: String -> String -> [String]
 mySplitOn _ [] = [""]
 mySplitOn delimiter input@(x:xs)
@@ -100,7 +91,9 @@ parseTransition line = case mySplitOn " | " line of
                 ">" -> R
                 "<" -> L
                 _   -> S
-        in (Normal fromState, readSymbols, writeSymbol, moveDirection, Normal toState)
+            trimmedFromState = trim fromState
+            trimmedToState = trim toState
+        in (Normal trimmedFromState, readSymbols, writeSymbol, moveDirection, Normal trimmedToState)
     _ -> error $ "Invalid transition format: " ++ line
 
 
@@ -130,7 +123,18 @@ extractSections (line:rest)
     (alphabetSection, statesSection, transitions) = extractSections rest
 
 
-
+{-
+    TM [Sym 'a',Sym 'b',Sym 'c'] [Normal "q0",Normal "q1",Normal "q2",Normal "q3"] 
+    [(Normal "q0",[Sym 'a'],None,R,Normal "q1 "),
+    (Normal "q0",[],None,R,Normal "q0 "),
+    (Normal "q1",[Sym 'b'],None,R,Normal "q2 "),
+    (Normal "q1",[],None,R,Normal "q0 "),
+    (Normal "q2",[Sym 'c'],None,R,Normal "q3 "),
+    (Normal "q2",[],None,R,Normal "q0 "),
+    (Normal "q3",[],None,R,Normal "accept "),
+    (Normal "q3",[Sym 'a'],None,R,Normal "q1 "),
+    (Normal "q3",[Sym 'b'],None,R,Normal "q2 "),(Normal "q3",[Sym 'c'],None,R,Normal "q3")]
+-}
 
 
 containsabc :: String
@@ -148,75 +152,3 @@ containsabc =
     "q3 | a | _ | > | q1 \n" ++
     "q3 | b | _ | > | q2 \n" ++
     "q3 | c | _ | > | q3"
-
--- Check if a state is an accepting state
-isAccepting :: State -> Bool
-isAccepting Accept = True
-isAccepting _      = False
-
--- Move the tape head in a given direction
--- Rewrite the moveHead function to correctly handle Tape type
-moveHead :: Direction -> Tape -> Tape
-moveHead L (l:ls, m, rs) = (init (l:ls), last (l:ls), m:rs)
-moveHead R (ls, m, r:rs) = ((ls ++ [m]), r, rs)
-moveHead _ tape           = tape
-
--- Get the transition for the current state and read symbol
-getTransition :: State -> Symbol -> TransitionTable -> Maybe Transition
-getTransition currentState currentSymbol transitions =
-    find (\(fromState, readSymbols, _, _, _) -> fromState == currentState && elem currentSymbol readSymbols) transitions
-
--- Execute a single step of the Turing machine
--- Modify stepTM and simulate to handle the correct Tape type
-stepTM :: TuringMachine -> Tape -> Maybe (TuringMachine, Tape)
-stepTM (TM alphabet states transitions) tape@(left, current, right) =
-    case current of
-        None -> Nothing  -- Blank symbol, halt
-        _    ->
-            let currentState = head states
-                transition = getTransition currentState current transitions
-            in case transition of
-                Just (fromState, _, writeSymbol, direction, toState) ->
-                    let newTape = moveHead direction tape
-                        newStateList = if isAccepting toState then [toState] else tail states ++ [toState]
-                        newTM = TM alphabet newStateList transitions
-                    in Just (newTM, newTape)
-                Nothing -> Nothing  -- No valid transition found, halt
-{- 
--- Correcting simulateTM function signature and implementation
-simulateTM :: TuringMachine -> [Symbol] -> Int -> (TuringMachine, Tape)
-simulateTM tm input steps = simulate tm (input, None, [])
-  where
-    simulate :: TuringMachine -> Tape -> (TuringMachine, Tape)
-    simulate machine tape@(left, current, right)
-      | steps <= 0 = (machine, tape)
-      | otherwise =
-        case stepTM machine tape of
-          Just (newMachine, newTape) ->
-            if isAccepting (head (getStateList newMachine))
-              then (newMachine, newTape)
-              else simulate newMachine newTape
-                    -- Subtracting step count by 1 in each iteration
-                    (steps - 1)
-          Nothing -> (machine, tape)  -- Halt due to no valid transition
-      where
-        getStateList :: TuringMachine -> StateList
-        getStateList (TM _ states _) = states -}
-
-
-
-
--- Helper function to convert a string to a list of symbols
-stringToSymbols :: String -> [Symbol]
-stringToSymbols = map Sym
-
-{- main :: IO ()
-main = do
-    let specification = containsabc
-        inputString = "abc"  -- Input string to simulate
-        tm = parseSpecification specification
-        inputSymbols = stringToSymbols inputString
-
-    let (finalTM, finalTape) = simulateTM tm inputSymbols 1000
-    putStrLn $ "Final Turing Machine state: " ++ show finalTM
-    putStrLn $ "Final Tape: " ++ show finalTape -}
