@@ -2,6 +2,7 @@
 import Data.List
 import Data.Char
 import Data.Either
+import Data.Maybe
 
 type ErrMsg = String
 
@@ -45,27 +46,6 @@ duplicates [] = False
 duplicates (x:xs) = elem x xs || duplicates xs
 
 
-{-
-lexer: parses a specification file into a list of tokens
--}
-{-
-lexer :: String -> Either Specification ErrMsg
-lexer s | take 9 s == "alphabet:" 
-    = let (grab, rest) = span (\x -> x /= "\n") (drop 9 s) 
-          (_, sta, tra) = lexer rest
-       in Left (lexAlphabet grab, sta, tra) 
-lexer s | take 7 s == "states:" 
-    = let (grab, rest) = span (\x -> x /= "\n") (drop 9 s) 
-          (alp, _, tra) = lexer rest 
-       in Left (alp, parseStates grab, tra) 
-lexer s | take 14 s == "transitions:\n" 
-    = let rest = drop 14 s
-          (alp, sta, _) = lexer rest
-       in Left (alp, sta, parseTransitions rest) 
-lexer s = Right "Invalid specification file"
--}
-
-
 
 {-
 parseAlphabet: parses a csv of symbols converting them to an Alphabet
@@ -78,7 +58,7 @@ parseAlphabet s
         | (duplicates charList) = Right "Alphabet contains duplicate symbols"
         | otherwise = Left (map Sym charList)
         where 
-            stringList = filter (not . null) (split ',' s) 
+            stringList = filter (not . null) (split ',' (trim s))
             charList = map head stringList 
 
 {-
@@ -108,7 +88,6 @@ stateValid states (Normal s)
     where
         stateNames = map (\(Normal name) -> name) states
         stateNamesWithoutCurrent = filter (/= s) stateNames
-
         
 
 
@@ -117,20 +96,6 @@ parseTransitions: parses all transitions using parseTransition as a helper
 
 parseTransition: parses a single transition
 -}
-{-
-parseTransitions :: String -> StateList -> Alphabet -> Either TransitionTable ErrMsg
-parseTransitions "" _ _ = Right []  
-parseTransitions s stateList alphabet =
-    case parsedCurrent of
-        Left transition -> case parseTransitions rest stateList alphabet of
-            Left transitions -> Left (transition : transitions)
-            Right errMsg -> Right errMsg
-        Right errMsg -> Right errMsg 
-    where
-        (current, rest) = span (/= '\n') s
-        parsedCurrent = parseTransition current stateList alphabet
--}
-
 parseTransitions :: String -> StateList -> Alphabet -> Either TransitionTable ErrMsg
 parseTransitions "" _ _ = Right []  
 parseTransitions s stateList alphabet =
@@ -146,9 +111,6 @@ parseTransitions s stateList alphabet =
                         Left transitions -> Left (transition : transitions)
                         Right errMsg -> Right errMsg
                 Right errMsg -> Right errMsg
-
-test1 :: String
-test1 = "q0 | a   | _ | > | q1 \n q0 | b,c | _ | > | q0 \n q0 | _   | _ | _ | reject \n"
 
 parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
 parseTransition str stateList alphabet 
@@ -201,6 +163,29 @@ lexState stateList s = case s of
             then Left (Normal state)
             else Right ("State not found: '" ++ state ++ "'")
 
+
+
+{-
+lexer: parses a specification file into a list of tokens
+-}
+lexer :: String -> Either Specification ErrMsg
+
+containsabc :: String
+containsabc = 
+    "alphabet:a,b,c\n" ++
+    "states:q0,q1,q2\n" ++
+    "transitions:\n" ++
+    "q0 | a   | _ | > | q1 \n" ++ 
+    "q0 | b,c | _ | > | q0 \n" ++ 
+    "q0 | _   | _ | _ | reject \n" ++
+    "q1 | b | _ | > | q2 \n" ++
+    "q1 | a | _ | > | q1 \n" ++
+    "q1 | c | _ | > | q0 \n" ++
+    "q1 | _ | _ | _ | reject \n" ++
+    "q2 | c | _ | > | accept \n" ++
+    "q2 | a | _ | > | q1 \n" ++
+    "q2 | b | _ | > | q0 \n" ++
+    "q2 | _ | _ | _ | reject"
 
 
 
