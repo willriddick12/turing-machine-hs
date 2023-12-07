@@ -117,6 +117,7 @@ parseTransitions: parses all transitions using parseTransition as a helper
 
 parseTransition: parses a single transition
 -}
+{-
 parseTransitions :: String -> StateList -> Alphabet -> Either TransitionTable ErrMsg
 parseTransitions "" _ _ = Right []  
 parseTransitions s stateList alphabet =
@@ -126,9 +127,28 @@ parseTransitions s stateList alphabet =
             Right errMsg -> Right errMsg
         Right errMsg -> Right errMsg 
     where
-        (current, rest) = span (/= ';') s
+        (current, rest) = span (/= '\n') s
         parsedCurrent = parseTransition current stateList alphabet
+-}
 
+parseTransitions :: String -> StateList -> Alphabet -> Either TransitionTable ErrMsg
+parseTransitions "" _ _ = Right []  
+parseTransitions s stateList alphabet =
+    case lines s of
+        [] -> Right "No transitions found"
+        transitions -> parseTransitionList transitions
+    where
+        parseTransitionList [] = Left []
+        parseTransitionList (t:ts) =
+            case parseTransition t stateList alphabet of
+                Left transition ->
+                    case parseTransitionList ts of
+                        Left transitions -> Left (transition : transitions)
+                        Right errMsg -> Right errMsg
+                Right errMsg -> Right errMsg
+
+test1 :: String
+test1 = "q0 | a   | _ | > | q1 \n q0 | b,c | _ | > | q0 \n q0 | _   | _ | _ | reject \n"
 
 parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
 parseTransition str stateList alphabet 
