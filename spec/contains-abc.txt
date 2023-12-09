@@ -4,12 +4,10 @@ transitions:
 q0 | a   | _ | > | q1
 q0 | b,c | _ | > | q0
 q0 | _   | _ | _ | reject
-
 q1 | b | _ | > | q2
 q1 | a | _ | > | q1
 q1 | c | _ | > | q0
 q1 | _ | _ | _ | reject
-
 q2 | c | _ | > | accept
 q2 | a | _ | > | q1
 q2 | b | _ | > | q0
