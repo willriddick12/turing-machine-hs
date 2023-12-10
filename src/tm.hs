@@ -187,6 +187,20 @@ containsabc =
     "q2 | _ | _ | _ | reject"
 
 
+moveTape :: Tape -> Symbol -> Direction -> Tape
+moveTape (left, _, right) writeSymbol direction =
+    case direction of
+        L -> (init left, last left, writeSymbol : right)
+        R -> (left ++ [writeSymbol], head right, tail right)
+        S -> (left, writeSymbol, right)
+
+getCurrentSymbol :: Tape -> Symbol
+getCurrentSymbol (_, currentSymbol, _) = currentSymbol
+
+initializeTape :: String -> Tape
+initializeTape input = ([], None, map Sym input ++ [None])
+
+
 {-
 simulateTMWithLimit
 -}
