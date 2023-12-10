@@ -5,27 +5,19 @@ import Data.Either
 import Data.Maybe
 
 type ErrMsg = String
-
 data Symbol = Sym Char | None deriving (Show, Eq) -- None is the blank symbol, it will not write to the tape
 type Alphabet = [Symbol] 
-
--- A tape is a list of symbols, a head symbol, and symbols
-type Tape = ([Symbol], Symbol, [Symbol]) 
+type Tape = ([Symbol], Symbol, [Symbol]) -- A tape is a list of symbols, a head symbol, and symbols
 data Direction = L | R | S deriving (Show, Eq) -- left, right, stay respectively
-
 data State = Normal String | Accept | Reject deriving (Show, Eq)
 type StateList = [State]
-
-type Transition = (State, [Symbol], Symbol, Direction, State)
+type Transition = (State, Symbol, Symbol, Direction, State)
 type TransitionTable = [Transition]
-
-type Specification = (Alphabet, StateList, TransitionTable) 
-type TuringMachine = (Specification, Tape)
-
+data Specification = Spec Alphabet StateList TransitionTable deriving (Show, Eq)
 
 
 {-
-    GENERAL HELPER FUNCTIONS
+General Helper Functions
 -}
 -- Splits a list on a delimiter
 split :: Eq a => a -> [a] -> [[a]]
@@ -45,6 +37,10 @@ duplicates :: Eq a => [a] -> Bool
 duplicates [] = False
 duplicates (x:xs) = elem x xs || duplicates xs
 
+-- Removes duplicates from a list
+removeDuplicates :: Eq a => [a] -> [a]
+removeDuplicates [] = []
+removeDuplicates (x:xs) = x : removeDuplicates (filter (/= x) xs)
 
 
 {-
@@ -55,11 +51,10 @@ parseAlphabet "" = Right ("No alphabet specified")
 parseAlphabet s  
         | Just err <- find (\x -> length x > 1) stringList = Right ("Alphabet contains symbol with more than one character: '" ++ err ++ "'")
         | Just err <- find (not . isAlphaNum) charList = Right ("Alphabet contains non-alphanumeric symbol: '" ++ [err] ++ "'") 
-        | (duplicates charList) = Right "Alphabet contains duplicate symbols"
         | otherwise = Left (map Sym charList)
         where 
             stringList = filter (not . null) (split ',' (trim s))
-            charList = map head stringList 
+            charList = removeDuplicates (map head stringList)
 
 {-
 parseStates: parses a csv of states
@@ -72,23 +67,18 @@ parseStates s =
         Nothing -> Left states  
         Just (Right errMsg) -> Right errMsg  
     where
-        states = map (\x -> Normal x) (filter (not . null) (split ',' s))
+        states = removeDuplicates (map (\x -> Normal x) (filter (not . null) (split ',' s)))
         validationResults = map (stateValid states) states
 
 stateValid :: StateList -> State -> Either Bool ErrMsg
 stateValid states (Normal s)
     | null s = Right "State name cannot be empty"
-    | s `elem` stateNamesWithoutCurrent = Right ("Duplicate state name found: '" ++ s ++ "'")
     | isUpper (head s) = Right ("State name must start with a lowercase character: '" ++ s ++ "'")
     | not (isAlpha (head s)) = Right ("State name must start with an alphabetic character: '" ++ s ++ "'")
     | any (not . isAlphaNum) s = Right ("State name must be alphanumeric: '" ++ s ++ "'")
     | s == "accept" = Right ("State name cannot be 'accept'")
     | s == "reject" = Right ("State name cannot be 'reject'")
     | otherwise = Left True
-    where
-        stateNames = map (\(Normal name) -> name) states
-        stateNamesWithoutCurrent = filter (/= s) stateNames
-        
 
 
 {-
@@ -96,101 +86,106 @@ parseTransitions: parses all transitions using parseTransition as a helper
 
 parseTransition: parses a single transition
 -}
-parseTransitions :: String -> StateList -> Alphabet -> Either TransitionTable ErrMsg
-parseTransitions "" _ _ = Right []  
-parseTransitions s stateList alphabet =
-    case lines s of
-        [] -> Right "No transitions found"
-        transitions -> parseTransitionList transitions
-    where
-        parseTransitionList [] = Left []
-        parseTransitionList (t:ts) =
-            case parseTransition t stateList alphabet of
-                Left transition ->
-                    case parseTransitionList ts of
-                        Left transitions -> Left (transition : transitions)
-                        Right errMsg -> Right errMsg
-                Right errMsg -> Right errMsg
+parseTransitions :: [String] -> Alphabet -> StateList -> Either TransitionTable ErrMsg
+parseTransitions [] _ _ = Right "No transitions found"
+parseTransitions transitions alphabet stateList =
+    let results = map (\x -> parseTransition x alphabet stateList) transitions
+        errors = [e | Right e <- results]
+        validTransitions = [t | Left t <- results]
+    in if null errors
+       then Left validTransitions
+       else Right (head errors)
 
-parseTransition :: String -> StateList -> Alphabet -> Either Transition ErrMsg
-parseTransition str stateList alphabet 
+
+
+
+parseTransition :: String -> Alphabet -> StateList -> Either Transition ErrMsg
+parseTransition str alphabet stateList 
     | length parts /= 5 = Right ("Invalid transition: '" ++ str ++ "'")
     | otherwise = case (state, readSyms, writeSym, dir, nextState) of
-        (Left st, Left rs, Left ws, Left d, Left ns) -> Left (st, rs, ws, d, ns)
+        (Left st, Left rs, Left ws, Left dr, Left ns) -> Left (st, rs, ws, dr, ns)
         (Right st, _, _, _, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ st)
         (_, Right rs, _, _, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ rs)
         (_, _, Right ws, _, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ ws)
-        (_, _, _, Right d, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ d)
+        (_, _, _, Right dr, _) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ dr)
         (_, _, _, _, Right ns) -> Right ("Invalid transition: '" ++ str ++ "'. Reason: " ++ ns)
     where 
         parts = split '|' str
         state = lexState stateList (trim (parts !! 0)) 
-        readSyms = lexSymbols alphabet (trim (parts !! 1)) 
+        readSyms = lexSymbol alphabet (trim (parts !! 1)) 
         writeSym = lexSymbol alphabet (trim (parts !! 2)) 
         dir = lexDirection (trim (parts !! 3))
         nextState = lexState stateList (trim (parts !! 4))
 
-lexSymbols :: Alphabet -> String -> Either [Symbol] ErrMsg
-lexSymbols alphabet s =
-  case find isRight symbols of
-    Just err -> Right (fromRight err)
-    Nothing -> Left (lefts symbols)
-  where
-    symbols =  map (lexSymbol alphabet) (filter (not . null) (split ',' s))
-    isRight (Right _) = True
-    isRight _ = False
-    fromRight (Right x) = x
-
 lexSymbol :: Alphabet -> String -> Either Symbol ErrMsg
 lexSymbol alphabet s | length s /= 1 = Right $ "Symbol must be one character: '" ++ s ++ "'"
-lexSymbol _ ['_'] = Left None
-lexSymbol alphabet [s] | Sym s `elem` alphabet = Left (Sym s)
-lexSymbol _ [s] = Right $ "Symbol not in alphabet: '" ++ [s] ++ "'"
+lexSymbol alphabet "_" = Left None
+lexSymbol alphabet s | Sym (head s) `elem` alphabet = Left (Sym (head s))
+lexSymbol alphabet s = Right $ "Symbol not in alphabet: '" ++ [head s] ++ "'"
 
 lexDirection :: String -> Either Direction ErrMsg
-lexDirection s = case s of
-    ">" -> Left R
-    "<" -> Left L
-    "_" -> Left S
-    x   -> Right ("Invalid direction: '" ++ x ++ "'. Must be one of the following: '<', '>', '_'")
+lexDirection ">" = Left R
+lexDirection "<" = Left L
+lexDirection "_" = Left S
+lexDirection x = Right ("Invalid direction: '" ++ x ++ "'. Must be one of the following: '<', '>', '_'")
 
 lexState :: StateList -> String -> Either State ErrMsg
-lexState stateList s = case s of
-    "accept" -> Left Accept
-    "reject" -> Left Reject
-    state ->
-        if Normal state `elem` stateList
-            then Left (Normal state)
-            else Right ("State not found: '" ++ state ++ "'")
-
+lexState stateList "accept" = Left Accept
+lexState stateList "reject" = Left Reject
+lexState stateList s = if Normal s `elem` stateList
+    then Left (Normal s)
+    else Right ("State not found in statelist: '" ++ s ++ "'")
 
 
 {-
-lexer: parses a specification file into a list of tokens
+parse: parses a specification file into a list of tokens
 -}
-lexer :: String -> Either Specification ErrMsg
+parseSpecification :: String -> Either ErrMsg Specification
+parseSpecification spec = do
+    let (alphabetSection, stateSection, transitionLines) = extractSections (lines spec)
+    alphabet <- case parseAlphabet alphabetSection of
+        Left a -> return a
+        Right errMsg -> Left errMsg
+    states <- case parseStates stateSection of
+        Left s -> return s
+        Right errMsg -> Left errMsg
+    transitions <- case parseTransitions transitionLines alphabet states of
+        Left t -> return t
+        Right errMsg -> Left errMsg
+    return (Spec alphabet (Accept:Reject:states) transitions)
+
+
+extractSections :: [String] -> (String, String, [String])
+extractSections [] = ("", "", [])
+extractSections (line:rest)
+        | "alphabet:" `isPrefixOf` line = (trim $ dropWhile isSpace $ drop 9 line, statesSection, transitions)
+        | "states:" `isPrefixOf` line = (alphabetSection, trim $ dropWhile isSpace $ drop 7 line, transitions)
+        | "transitions:" `isPrefixOf` line = (alphabetSection, statesSection, rest)
+        | otherwise = (alphabetSection, statesSection, rest)
+    where
+        (alphabetSection, statesSection, transitions) = extractSections rest
 
 containsabc :: String
 containsabc = 
     "alphabet:a,b,c\n" ++
     "states:q0,q1,q2\n" ++
     "transitions:\n" ++
-    "q0 | a   | _ | > | q1 \n" ++ 
-    "q0 | b,c | _ | > | q0 \n" ++ 
-    "q0 | _   | _ | _ | reject \n" ++
-    "q1 | b | _ | > | q2 \n" ++
-    "q1 | a | _ | > | q1 \n" ++
-    "q1 | c | _ | > | q0 \n" ++
-    "q1 | _ | _ | _ | reject \n" ++
-    "q2 | c | _ | > | accept \n" ++
-    "q2 | a | _ | > | q1 \n" ++
-    "q2 | b | _ | > | q0 \n" ++
+    "q0 | a | _ | > | q1\n" ++ 
+    "q0 | b | _ | > | q0\n" ++ 
+    "q0 | c | _ | > | q0\n" ++ 
+    "q0 | _ | _ | _ | reject\n" ++
+    "q1 | b | _ | > | q2\n" ++
+    "q1 | a | _ | > | q1\n" ++
+    "q1 | c | _ | > | q0\n" ++
+    "q1 | _ | _ | _ | reject\n" ++
+    "q2 | c | _ | > | accept\n" ++
+    "q2 | a | _ | > | q1\n" ++
+    "q2 | b | _ | > | q0\n" ++
     "q2 | _ | _ | _ | reject"
 
 
-
 {-
-    simulateTMWithLimit
+simulateTMWithLimit
 -}
 
 {-
