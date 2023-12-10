@@ -24,7 +24,7 @@ helpMessage = "Commands:\n\
     \tv - Test verbosely\n\
     \q  - Quit"
 
-main :: IO ()
+{- main :: IO ()
 main = mainLoop Nothing
 
 mainLoop :: Maybe Specification -> IO ()
@@ -41,7 +41,7 @@ mainLoop mtm = do
         "t" -> putStrLn "Not implemented" >> mainLoop mtm
         "tv" -> putStrLn "Not implemented" >> mainLoop mtm
         "q" -> putStrLn "Exiting."
-        unknown -> putStrLn ("Unknown command: '" ++ unknown ++ "'") >> mainLoop mtm
+        unknown -> putStrLn ("Unknown command: '" ++ unknown ++ "'") >> mainLoop mtm -}
 
 
 
@@ -187,26 +187,64 @@ containsabc =
     "q2 | _ | _ | _ | reject"
 
 
+simulateTuringMachine :: Specification -> String -> Bool
+simulateTuringMachine (Spec alphabet states transitions) input =
+    runTuringMachine transitions alphabet (head states) (initializeTape input)
+
+
+runTuringMachine :: TransitionTable -> Alphabet -> State -> Tape -> Bool
+runTuringMachine transitions alphabet currentState tape =
+    case find (\(state, symbol, _, _, _) -> state == currentState && symbol == getCurrentSymbol tape) transitions of
+        Just (_, _, writeSymbol, direction, nextState) ->
+            let newTape = moveTape tape writeSymbol direction
+            in runTuringMachine transitions alphabet nextState newTape
+        Nothing -> case currentState of
+            Accept -> True
+            Reject -> False
+            _      -> False
+
+currentState :: Tape -> State
+currentState (_, _, _) = Normal "unknown" 
+
 moveTape :: Tape -> Symbol -> Direction -> Tape
-moveTape (left, _, right) writeSymbol direction =
+moveTape (left, currentSymbol, right) writeSymbol direction =
     case direction of
-        L -> (init left, last left, writeSymbol : right)
-        R -> (left ++ [writeSymbol], head right, tail right)
+        L -> if not (null left)
+                then (init left, last left, writeSymbol : right)
+                else (left, currentSymbol, right)  -- Can't move left beyond the beginning of the tape
+        R -> if not (null right)
+                then (left ++ [currentSymbol], head right, tail right)
+                else (left ++ [currentSymbol], writeSymbol, [])
         S -> (left, writeSymbol, right)
+
 
 getCurrentSymbol :: Tape -> Symbol
 getCurrentSymbol (_, currentSymbol, _) = currentSymbol
 
 initializeTape :: String -> Tape
-initializeTape input = ([], None, map Sym input ++ [None])
+initializeTape input = ([None], Sym (head input), map Sym (tail input) ++ [None])
+
+
+
+main :: IO ()
+main = do
+    let specResult = parseSpecification containsabc
+    case specResult of
+        Left errMsg -> putStrLn $ "Error parsing specification: " ++ errMsg
+        Right tmSpec -> do
+            putStrLn "Specification loaded successfully."
+            putStrLn "Enter input string: "
+            input <- getLine
+            let result = simulateTuringMachine tmSpec input
+            putStrLn $ if result then "Accepted" else "Rejected"
 
 
 {-
 simulateTMWithLimit
 -}
 
-{-
-simulateTMWithLimit :: TuringMachine -> State -> Int -> Either ErrMsg (State, Tape)
+
+{-simulateTMWithLimit :: TuringMachine -> State -> Int -> Either ErrMsg (State, Tape)
 simulateTMWithLimit tm@(spec, tape) currentState steps
   | steps <= 0 = Left "Exceeded maximum steps"
   | currentState == Accept || currentState == Reject = Right (currentState, tape)
