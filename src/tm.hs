@@ -16,31 +16,34 @@ type TransitionTable = [Transition]
 data Specification = Spec Alphabet StateList TransitionTable deriving (Show, Eq)
 
 
-{-
-General Helper Functions
--}
--- Splits a list on a delimiter
-split :: Eq a => a -> [a] -> [[a]]
-split _ [] = [[]]
-split delim lst =
-    let (first, remainder) = span (/= delim) lst
-     in first : case remainder of
-        [] -> []
-        (_:xs) -> split delim xs
+helpMessage :: String
+helpMessage = "Commands:\n\
+    \h  - Show help\n\
+    \l  - Load file\n\
+    \t  - Test string\n\
+    \tv - Test verbosely\n\
+    \q  - Quit"
 
--- Trim leading and trailing spaces from a string
-trim :: String -> String
-trim = f . f where f = reverse . dropWhile (== ' ')
+main :: IO ()
+main = mainLoop Nothing
 
--- Checks if a list contains duplicates
-duplicates :: Eq a => [a] -> Bool
-duplicates [] = False
-duplicates (x:xs) = elem x xs || duplicates xs
+mainLoop :: Maybe Specification -> IO ()
+mainLoop mtm = do
+    putStr "> "
+    command <- getLine
+    case command of
+        "h" -> putStrLn helpMessage >> mainLoop mtm
+        "help" -> putStrLn helpMessage >> mainLoop mtm
+        "l" -> do
+            putStrLn "Enter file path: "
+            filePath <- getLine
+            putStrLn ("Loading file: " ++ filePath) >> mainLoop mtm
+        "t" -> putStrLn "Not implemented" >> mainLoop mtm
+        "tv" -> putStrLn "Not implemented" >> mainLoop mtm
+        "q" -> putStrLn "Exiting."
+        unknown -> putStrLn ("Unknown command: '" ++ unknown ++ "'") >> mainLoop mtm
 
--- Removes duplicates from a list
-removeDuplicates :: Eq a => [a] -> [a]
-removeDuplicates [] = []
-removeDuplicates (x:xs) = x : removeDuplicates (filter (/= x) xs)
+
 
 
 {-
@@ -233,45 +236,32 @@ displayTape (left, currentSymbol, right) = reverse left ++ [currentSymbol] ++ ri
 outputResult :: Either ErrMsg (State, Tape) -> String
 outputResult (Left errMsg) = "Error: " ++ errMsg
 outputResult (Right (state, tape)) = "Final state: " ++ show state ++ "\nFinal tape: " ++ displayTape tape
-
-
-
-main :: IO ()
-main = do
-  let (alphabet, states, transitions) = specification
-      inputTape = "aaaaaccbac" -- Input tape here
-      initialTape = setInitialTape inputTape alphabet
-      tm = (specification, initialTape)
-      initialState = Normal "q0"
-      maxSteps = 1000
-
-  if not (validateTransitionTable specification)
-    then putStrLn "Transition table is incomplete"
-    else if not (validateInput alphabet initialTape)
-      then putStrLn "Input tape contains symbols not in the alphabet"
-      else case simulateTMWithLimit tm initialState maxSteps of
-        Left errMsg -> putStrLn $ "Error: " ++ errMsg
-        Right (finalState, finalTape) -> putStrLn $ outputResult (Right (finalState, finalTape))
 -}
+
+
+
 {-
-alphabet:a,b,c
-states:q0,q1,q2
-transitions:
-q0 | a   | _ | > | q1
-q0 | b,c | _ | > | q0
-q0 | _   | _ | _ | reject
-
-q1 | b | _ | > | q2
-q1 | a | _ | > | q1
-q1 | c | _ | > | q0
-q1 | _ | _ | _ | reject
-
-q2 | c | _ | > | accept
-q2 | a | _ | > | q1
-q2 | b | _ | > | q0
-q2 | _ | _ | _ | rejectp
+General Helper Functions
 -}
+-- Splits a list on a delimiter
+split :: Eq a => a -> [a] -> [[a]]
+split _ [] = [[]]
+split delim lst =
+    let (first, remainder) = span (/= delim) lst
+     in first : case remainder of
+        [] -> []
+        (_:xs) -> split delim xs
 
---specification :: Specification
---specification = (['a', 'b', 'c'], [Normal "q0", Normal "q1", Normal "q2", Reject, Accept], [ (Normal "q0", ['a'], '_', R, Normal "q1"),(Normal "q0", ['b', 'c'], '_', R, Normal "q0"),(Normal "q0", ['_'], '_', S, Reject),(Normal "q1", ['b'], '_', R, Normal "q2"),(Normal "q1", ['a'], '_', R, Normal "q1"),(Normal "q1", ['c'], '_', R, Normal "q0"),(Normal "q1", ['_'], '_', S, Reject),(Normal "q2", ['c'], '_', R, Accept),(Normal "q2", ['a'], '_', R, Normal "q1"),(Normal "q2", ['b'], '_', R, Normal "q0"),(Normal "q2", ['_'], '_', S, Reject)])
+-- Trim leading and trailing spaces from a string
+trim :: String -> String
+trim = f . f where f = reverse . dropWhile (== ' ')
 
+-- Checks if a list contains duplicates
+duplicates :: Eq a => [a] -> Bool
+duplicates [] = False
+duplicates (x:xs) = elem x xs || duplicates xs
+
+-- Removes duplicates from a list
+removeDuplicates :: Eq a => [a] -> [a]
+removeDuplicates [] = []
+removeDuplicates (x:xs) = x : removeDuplicates (filter (/= x) xs)
