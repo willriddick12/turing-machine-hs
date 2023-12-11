@@ -3,6 +3,9 @@ import Data.List
 import Data.Char
 import Data.Either
 import Data.Maybe
+import System.IO
+import System.Directory (doesFileExist)
+
 
 type ErrMsg = String
 data Symbol = Sym Char | None deriving (Show, Eq) -- None is the blank symbol, it will not write to the tape
@@ -24,25 +27,80 @@ helpMessage = "Commands:\n\
     \tv - Test verbosely\n\
     \q  - Quit"
 
-{- main :: IO ()
-main = mainLoop Nothing
+main :: IO ()
+main = do
+    let initialSpec = Spec [] [] [] -- Initial empty specification
+    let loadedSpec = initialSpec    -- Define a variable to hold loaded specification
 
-mainLoop :: Maybe Specification -> IO ()
-mainLoop mtm = do
     putStr "> "
     command <- getLine
     case command of
-        "h" -> putStrLn helpMessage >> mainLoop mtm
-        "help" -> putStrLn helpMessage >> mainLoop mtm
+        -- HELP
+        "h" -> putStrLn helpMessage 
+        "help" -> putStrLn helpMessage 
+        
+        -- LOAD
         "l" -> do
             putStrLn "Enter file path: "
+            putStr "> "
             filePath <- getLine
-            putStrLn ("Loading file: " ++ filePath) >> mainLoop mtm
-        "t" -> putStrLn "Not implemented" >> mainLoop mtm
-        "tv" -> putStrLn "Not implemented" >> mainLoop mtm
-        "q" -> putStrLn "Exiting."
-        unknown -> putStrLn ("Unknown command: '" ++ unknown ++ "'") >> mainLoop mtm -}
+            putStrLn ("Loading file: " ++ filePath)
+            fileContent <- readFileToString filePath
 
+            let loadedSpec = case fileContent of
+                    Left errMsg -> initialSpec -- Assign initialSpec in case of error
+                    Right contents ->
+                        case parseSpecification contents of
+                            Left errMsg -> initialSpec -- Assign initialSpec in case of parsing error
+                            Right parsedSpec -> parsedSpec -- Assign parsed specification to newLoadedSpec
+
+            case fileContent of
+                Left errMsg -> putStrLn $ "Error loading file: " ++ errMsg
+                Right _ -> do
+                    putStrLn "Specification loaded successfully."
+
+
+        -- TEST
+        "t" -> do
+            putStrLn "Enter input string: "
+            putStr "> "
+            input <- getLine
+
+            case loadedSpec of 
+                Spec [] [] [] -> putStrLn "No specification file loaded."
+                spec -> do
+                    let result = simulateTuringMachine spec input
+                    putStrLn $ if result 
+                        then "Accepted: " ++ input 
+                        else "Rejected: " ++ input
+
+        -- TEST VERBOSELY
+        "tv" -> do
+            putStrLn "Not implemented" 
+
+        -- QUIT
+        "q" -> do 
+            putStrLn "Exiting."
+            return()
+        
+        -- UNKNOWN COMMAND 
+        unknown -> putStrLn ("Unknown command: '" ++ unknown ++ "'") 
+
+    -- LOOP
+    main
+            
+        
+    
+readFileToString :: FilePath -> IO (Either String String)
+readFileToString filePath = do
+    fileExists <- doesFileExist filePath
+    if fileExists
+        then do
+            handle <- openFile filePath ReadMode
+            contents <- hGetContents handle
+            hClose handle
+            return $ Right contents
+        else return $ Left "File doesn't exist or is inaccessible."
 
 
 
@@ -226,6 +284,7 @@ initializeTape input = ([None], Sym (head input), map Sym (tail input) ++ [None]
 
 
 
+{-
 main :: IO ()
 main = do
     let specResult = parseSpecification containsabc
@@ -237,7 +296,7 @@ main = do
             input <- getLine
             let result = simulateTuringMachine tmSpec input
             putStrLn $ if result then "Accepted" else "Rejected"
-
+-}
 
 {-
 simulateTMWithLimit
