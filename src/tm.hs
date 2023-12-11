@@ -27,7 +27,7 @@ helpMessage = "Commands:\n\
     \tv - Test verbosely\n\
     \q  - Quit"
 
-main :: IO ()
+{- main :: IO ()
 main = do
     let initialSpec = Spec [] [] [] -- Initial empty specification
     let loadedSpec = initialSpec    -- Define a variable to hold loaded specification
@@ -87,7 +87,7 @@ main = do
         unknown -> putStrLn ("Unknown command: '" ++ unknown ++ "'") 
 
     -- LOOP
-    main
+    main -}
             
         
     
@@ -245,46 +245,10 @@ containsabc =
     "q2 | _ | _ | _ | reject"
 
 
-simulateTuringMachine :: Specification -> String -> Bool
-simulateTuringMachine (Spec alphabet states transitions) input =
-    runTuringMachine transitions alphabet (head states) (initializeTape input)
-
-
-runTuringMachine :: TransitionTable -> Alphabet -> State -> Tape -> Bool
-runTuringMachine transitions alphabet currentState tape =
-    case find (\(state, symbol, _, _, _) -> state == currentState && symbol == getCurrentSymbol tape) transitions of
-        Just (_, _, writeSymbol, direction, nextState) ->
-            let newTape = moveTape tape writeSymbol direction
-            in runTuringMachine transitions alphabet nextState newTape
-        Nothing -> case currentState of
-            Accept -> True
-            Reject -> False
-            _      -> False
-
-currentState :: Tape -> State
-currentState (_, _, _) = Normal "unknown" 
-
-moveTape :: Tape -> Symbol -> Direction -> Tape
-moveTape (left, currentSymbol, right) writeSymbol direction =
-    case direction of
-        L -> if not (null left)
-                then (init left, last left, writeSymbol : right)
-                else (left, currentSymbol, right)  -- Can't move left beyond the beginning of the tape
-        R -> if not (null right)
-                then (left ++ [currentSymbol], head right, tail right)
-                else (left ++ [currentSymbol], writeSymbol, [])
-        S -> (left, writeSymbol, right)
-
-
-getCurrentSymbol :: Tape -> Symbol
-getCurrentSymbol (_, currentSymbol, _) = currentSymbol
-
-initializeTape :: String -> Tape
-initializeTape input = ([None], Sym (head input), map Sym (tail input) ++ [None])
 
 
 
-{-
+
 main :: IO ()
 main = do
     let specResult = parseSpecification containsabc
@@ -294,60 +258,70 @@ main = do
             putStrLn "Specification loaded successfully."
             putStrLn "Enter input string: "
             input <- getLine
-            let result = simulateTuringMachine tmSpec input
-            putStrLn $ if result then "Accepted" else "Rejected"
--}
+            let result = simulateTMWithLimit tmSpec (getInitialState tmSpec) (setInitialTape input (getAlphabetFromSpecification tmSpec)) 1000
+            putStrLn $ outputResult result
+
 
 {-
 simulateTMWithLimit
 -}
 
+getInitialState :: Specification -> State
+getInitialState (Spec _ (initialState:_) _) = initialState
+getInitialState _ = error "Invalid Specification: No initial state found"
 
-{-simulateTMWithLimit :: TuringMachine -> State -> Int -> Either ErrMsg (State, Tape)
-simulateTMWithLimit tm@(spec, tape) currentState steps
+getAlphabetFromSpecification :: Specification -> Alphabet
+getAlphabetFromSpecification (Spec alphabet _ _) = alphabet
+
+
+simulateTMWithLimit :: Specification -> State -> Tape -> Int -> Either ErrMsg (State, Tape)
+simulateTMWithLimit (Spec alphabet states transitions) currentState tape steps
   | steps <= 0 = Left "Exceeded maximum steps"
   | currentState == Accept || currentState == Reject = Right (currentState, tape)
   | otherwise =
-      let (alphabet, states, transitions) = spec
-          (left, currentSymbol, right) = tape
+      let (left, currentSymbol, right) = tape
       in case findTransition currentState currentSymbol transitions of
         Just (_, _, writeSymbol, direction, nextState) ->
           let newTape = moveTape direction (left, writeSymbol, right)
-          in simulateTMWithLimit (spec, newTape) nextState (steps - 1)
-        Nothing -> Left "Invalid transition"
+          in simulateTMWithLimit (Spec alphabet states transitions) nextState newTape (steps - 1)
+        Nothing -> Left $ "Invalid transition for state '" ++ show currentState ++ "' and symbol '" ++ show currentSymbol ++ "'"
+
 
 
 -- Utility function to find a transition in the TransitionTable
 findTransition :: State -> Symbol -> TransitionTable -> Maybe Transition
-findTransition state symbol = find (\(st, symbols, _, _, _) -> st == state && symbol `elem` symbols)
+findTransition state symbol = find (\(st, symbols, _, _, _) -> st == state && symbol == head [symbols])
+
 
 moveTape :: Direction -> Tape -> Tape
 moveTape L (ls, m, rs) = case ls of
-  [] -> ([], ' ', m:rs)
+  [] -> ([], None, m:rs)
   (l:ls':lss) -> ([l], ls', m:rs)
 moveTape R (ls, m, rs) = case rs of
-  [] -> (ls ++ [m], ' ', [])
+  [] -> (ls ++ [m], None, [])
   (r:rs') -> (ls ++ [m], r, rs')
 moveTape S tape = tape
 
-validateTransitionTable :: Specification -> Bool
-validateTransitionTable (alphabet, states, transitions) =
-  all (\s -> all (\a -> any (\(_, sym, _, _, _) -> s == Normal "" || a `elem` sym) transitions) alphabet) states
 
 validateInput :: Alphabet -> Tape -> Bool
 validateInput alphabet (left, currentSymbol, right) =
   all (`elem` alphabet) (left ++ [currentSymbol] ++ right)
 
 setInitialTape :: String -> Alphabet -> Tape
-setInitialTape input alphabet = ([], head input, tail input)
+setInitialTape input alphabet = ([], Sym (head input), map Sym (tail input))
 
 displayTape :: Tape -> String
-displayTape (left, currentSymbol, right) = reverse left ++ [currentSymbol] ++ right
+displayTape (left, Sym currentSymbol, right) = reverse (map symbolToChar left) ++ [symbolToChar (Sym currentSymbol)] ++ map symbolToChar right
+
+
+symbolToChar :: Symbol -> Char
+symbolToChar (Sym c) = c
+symbolToChar None = '_' 
 
 outputResult :: Either ErrMsg (State, Tape) -> String
 outputResult (Left errMsg) = "Error: " ++ errMsg
 outputResult (Right (state, tape)) = "Final state: " ++ show state ++ "\nFinal tape: " ++ displayTape tape
--}
+
 
 
 
