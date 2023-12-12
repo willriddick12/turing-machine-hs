@@ -68,25 +68,26 @@ mainLoop loadedSpec = do
         -- TEST
         "t" -> do
             case loadedSpec of 
-                Spec [] [] [] -> putStrLn "No specification file loaded."
+                Spec [] [] [] -> do 
+                    putStrLn "No specification file loaded."
+                    mainLoop initialSpec
                 spec -> do
                     putStrLn "Enter input string: "
                     putStr "> "
                     input <- getLine
-
                     putStrLn $ "Testing input string: " ++ show input
-                    {-
-                    let result = simulateTuringMachine spec input
-                    putStrLn $ if result 
-                        then "Accepted: " ++ input 
-                        else "Rejected: " ++ input
-                        -}
+
+                    -- Run the Turing machine with a specific input
+                    let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
+
+                    -- Output the result in a format consistent with the tests
+                    putStrLn $ "Result: " ++ outputResult result
             
-            mainLoop loadedSpec
+                    mainLoop loadedSpec
 
         -- TEST VERBOSELY
         "tv" -> do
-            putStrLn "Not implemented" 
+            putStrLn "Not implemented." 
             mainLoop loadedSpec
 
         -- QUIT
@@ -112,23 +113,6 @@ readFileToString filePath = do
 
 
 
-
-{-
-main :: IO ()
-main = do
-    let specResult = parseSpecification containsabc
-    let spec = extractSpecification specResult
-
-    putStrLn "Specification loaded successfully."
-
-    -- Run the Turing machine with a specific input
-    putStrLn "Enter input string: "
-    input <- getLine
-    let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
-
-    -- Output the result in a format consistent with the tests
-    putStrLn $ "Result: " ++ outputResult result
--}
 {-
 parseAlphabet: parses a csv of symbols converting them to an Alphabet
 -}
