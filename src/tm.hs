@@ -89,6 +89,20 @@ main = do
     -- LOOP
     main -}
             
+main :: IO ()
+main = do
+  let specResult = parseSpecification containsabc
+  let spec = extractSpecification specResult
+
+  putStrLn "Specification loaded successfully."
+
+  -- Run the Turing machine with a specific input
+  putStrLn "Enter input string: "
+  input <- getLine
+  let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
+
+  -- Output the result in a format consistent with the tests
+  putStrLn $ "Result: " ++ outputResult result
         
     
 readFileToString :: FilePath -> IO (Either String String)
@@ -244,42 +258,9 @@ containsabc =
     "q2 | b | _ | > | q0\n" ++
     "q2 | _ | _ | _ | reject"
 
-
-
-
-
-
-main :: IO ()
-main = do
-  let specResult = parseSpecification containsabc
-  let spec = extractSpecification specResult
-
-  putStrLn "Specification loaded successfully."
-
-  -- Run the Turing machine with a specific input
-  putStrLn "Enter input string: "
-  input <- getLine
-  let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
-
-  -- Output the result in a format consistent with the tests
-  putStrLn $ "Result: " ++ outputResult result
-
-
-
-
 {-
-simulateTMWithLimit
+    simulateTMWithLimit
 -}
-
-getInitialState :: Specification -> State
-getInitialState (Spec _ _ transitions) = case transitions of
-  [] -> error "Invalid Specification: No transitions found"
-  ((initialState, _, _, _, _):_) -> initialState
-
-getAlphabetFromSpecification :: Specification -> Alphabet
-getAlphabetFromSpecification (Spec alphabet _ _) = alphabet
-
-
 simulateTMWithLimit :: Specification -> State -> Tape -> Int -> Either ErrMsg (State, Tape)
 simulateTMWithLimit (Spec alphabet states transitions) currentState tape steps
   | steps <= 0 = Left "Exceeded maximum steps"
@@ -293,13 +274,15 @@ simulateTMWithLimit (Spec alphabet states transitions) currentState tape steps
         Nothing -> Left $ "Invalid transition for state '" ++ show currentState ++ "' and symbol '" ++ show currentSymbol ++ "'"
 
 
+{-
+    HELPER FUNCTIONS FOR SIMULATING A TURING MACHINE
+-}
 
-
--- Utility function to find a transition in the TransitionTable
+--Function to find a transition in the TransitionTable
 findTransition :: State -> Symbol -> TransitionTable -> Maybe Transition
 findTransition state symbol = find (\(st, symbols, _, _, _) -> st == state && symbol == head [symbols])
 
-
+--Function to move tape left, right or stay
 moveTape :: Direction -> Tape -> Tape
 moveTape L (ls, m, rs) = case ls of
   [] -> ([], None, m:rs)
@@ -310,28 +293,32 @@ moveTape R (ls, m, rs) = case rs of
 moveTape S tape = tape
 
 
-validateInput :: Alphabet -> Tape -> Bool
+{- validateInput :: Alphabet -> Tape -> Bool
 validateInput alphabet (left, currentSymbol, right) =
-  all (`elem` alphabet) (left ++ [currentSymbol] ++ right)
+  all (`elem` alphabet) (left ++ [currentSymbol] ++ right) -}
 
+--Sets the inital tape based on input string 
 setInitialTape :: String -> Alphabet -> Tape
 setInitialTape input alphabet = ([], Sym (head input), map Sym (tail input))
 
-{- displayTape :: Tape -> String
-displayTape (left, Sym currentSymbol, right) = reverse (map symbolToChar left) ++ [symbolToChar (Sym currentSymbol)] ++ map symbolToChar right -}
+--Gets the inital state which is the first state of the first transition in specificaiton
+getInitialState :: Specification -> State
+getInitialState (Spec _ _ transitions) = case transitions of
+  [] -> error "Invalid Specification: No transitions found"
+  ((initialState, _, _, _, _):_) -> initialState
 
-symbolToChar :: Symbol -> Char
-symbolToChar (Sym c) = c
-symbolToChar None = '_' 
+--gets the alphabet from specification 
+getAlphabetFromSpecification :: Specification -> Alphabet
+getAlphabetFromSpecification (Spec alphabet _ _) = alphabet
 
+--Takes the result of simulateTMWithLimit and outputs whether we accept or rejct string
 outputResult :: Either ErrMsg (State, Tape) -> String
 outputResult (Left errMsg) = "Error: " ++ errMsg
 outputResult (Right (state, tape)) = case state of
   Accept -> "Accepted."
   Reject -> "Rejected"
 
-
-
+--Turn either specification to specification to be passed into SimulateTMWithLimit
 extractSpecification :: Either ErrMsg Specification -> Specification
 extractSpecification (Right spec) = spec
 extractSpecification (Left errMsg) = error $ "Error extracting specification: " ++ errMsg
