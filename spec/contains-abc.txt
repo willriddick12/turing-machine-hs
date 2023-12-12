@@ -1,7 +1,7 @@
 alphabet:a,b,c
 states:q0,q1,q2
 transitions:
-q0 | a | _ | > | q1
+q3 | a | _ | > | q1
 q0 | b | _ | > | q0
 q0 | c | _ | > | q0
 q0 | _ | _ | _ | reject

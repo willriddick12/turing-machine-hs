@@ -6,7 +6,6 @@ import Data.Maybe
 import System.IO
 import System.Directory (doesFileExist)
 
-
 type ErrMsg = String
 data Symbol = Sym Char | None deriving (Show, Eq) -- None is the blank symbol, it will not write to the tape
 type Alphabet = [Symbol] 
@@ -18,20 +17,18 @@ type Transition = (State, Symbol, Symbol, Direction, State)
 type TransitionTable = [Transition]
 data Specification = Spec Alphabet StateList TransitionTable deriving (Show, Eq)
 
-
-helpMessage :: String
-helpMessage = "Commands:\n\
-    \h  - Show help\n\
-    \l  - Load file\n\
-    \t  - Test string\n\
-    \tv - Test verbosely\n\
-    \q  - Quit"
-
+{-
+main
+-}
 main :: IO ()
 main = do
     putStrLn "\nWelcome to Turing Machine Simulator, enter 'h' for help."
     mainLoop (Spec [] [] [])
 
+{-
+mainLoop
+Accepts a specification file to be used for simulation.
+-}
 mainLoop :: Specification -> IO ()
 mainLoop loadedSpec = do
     let initialSpec = Spec [] [] [] -- Initial empty specification
@@ -42,6 +39,11 @@ mainLoop loadedSpec = do
         -- HELP
         "h" -> do
             putStrLn helpMessage 
+            mainLoop loadedSpec
+        
+        -- FORMAT
+        "f" -> do
+            putStrLn formatMessage
             mainLoop loadedSpec
         
         -- LOAD
@@ -99,22 +101,52 @@ mainLoop loadedSpec = do
         unknown -> do 
             putStrLn ("Unknown command: '" ++ unknown ++ "'") 
             mainLoop loadedSpec
-            
-
-        
-readFileToString :: FilePath -> IO (Either String String)
-readFileToString filePath = do
-    fileExists <- doesFileExist filePath
-    if fileExists
-        then do
-            contents <- readFile filePath
-            return $ Right contents
-        else return $ Left "File doesn't exist or is inaccessible."
 
 
+
+
+
+
+{---------------------------------------------------
+MESSAGE STRINGS
+---------------------------------------------------}
 
 {-
-parseAlphabet: parses a csv of symbols converting them to an Alphabet
+helpMessage
+Returns a string containing our help message.
+-}
+helpMessage :: String
+helpMessage = "Commands:\n\
+    \h  - Show help\n\
+    \f  - Show formatting for specification file\n\
+    \l  - Load file\n\
+    \t  - Test string\n\
+    \tv - Test verbosely\n\
+    \q  - Quit"
+
+{-
+formatMessage
+Returns a string containing our help message.
+-}
+formatMessage :: String
+formatMessage = "The format for a specification file is as follows:\n\
+    \alphabet:<alphabet>\n\
+    \states:<states>\n\
+    \transitions:\n\
+    \<state> | <read symbol> | <write symbol> | <direction> | <next state>"
+            
+
+
+
+
+
+{---------------------------------------------------
+PARSING FUNCTIONS
+---------------------------------------------------}
+
+{-
+parseAlphabet 
+Parses a csv of symbols converting them to an Alphabet
 -}
 parseAlphabet :: String -> Either Alphabet ErrMsg
 parseAlphabet "" = Right ("No alphabet specified")
@@ -127,9 +159,8 @@ parseAlphabet s
             charList = removeDuplicates (map head stringList)
 
 {-
-parseStates: parses a csv of states
-
-stateValid: checks if a state is valid
+parseStates
+Parses a csv of states
 -}
 parseStates :: String -> Either StateList ErrMsg
 parseStates s =
@@ -140,6 +171,10 @@ parseStates s =
         states = removeDuplicates (map (\x -> Normal x) (filter (not . null) (split ',' s)))
         validationResults = map (stateValid states) states
 
+{-
+stateValid
+Checks if a state is valid
+-}
 stateValid :: StateList -> State -> Either Bool ErrMsg
 stateValid states (Normal s)
     | null s = Right "State name cannot be empty"
@@ -150,11 +185,9 @@ stateValid states (Normal s)
     | s == "reject" = Right ("State name cannot be 'reject'")
     | otherwise = Left True
 
-
 {-
-parseTransitions: parses all transitions using parseTransition as a helper
-
-parseTransition: parses a single transition
+parseTransitions
+Parses all transitions using parseTransition as a helper
 -}
 parseTransitions :: [String] -> Alphabet -> StateList -> Either TransitionTable ErrMsg
 parseTransitions [] _ _ = Right "No transitions found"
@@ -166,9 +199,10 @@ parseTransitions transitions alphabet stateList =
        then Left validTransitions
        else Right (head errors)
 
-
-
-
+{-
+parseTransition
+Converts the string representation of a single transition into a Transition object
+-}
 parseTransition :: String -> Alphabet -> StateList -> Either Transition ErrMsg
 parseTransition str alphabet stateList 
     | length parts /= 5 = Right ("Invalid transition: '" ++ str ++ "'")
@@ -187,18 +221,30 @@ parseTransition str alphabet stateList
         dir = lexDirection (trim (parts !! 3))
         nextState = lexState stateList (trim (parts !! 4))
 
+{-
+lexSymbol
+Lexes a symbol from a string
+-}
 lexSymbol :: Alphabet -> String -> Either Symbol ErrMsg
 lexSymbol alphabet s | length s /= 1 = Right $ "Symbol must be one character: '" ++ s ++ "'"
 lexSymbol alphabet "_" = Left None
 lexSymbol alphabet s | Sym (head s) `elem` alphabet = Left (Sym (head s))
 lexSymbol alphabet s = Right $ "Symbol not in alphabet: '" ++ [head s] ++ "'"
 
+{-
+lexDirection
+Lexes a direction from a string
+-}
 lexDirection :: String -> Either Direction ErrMsg
 lexDirection ">" = Left R
 lexDirection "<" = Left L
 lexDirection "_" = Left S
 lexDirection x = Right ("Invalid direction: '" ++ x ++ "'. Must be one of the following: '<', '>', '_'")
 
+{-
+lexState
+Lexes a state from a string
+-}
 lexState :: StateList -> String -> Either State ErrMsg
 lexState stateList "accept" = Left Accept
 lexState stateList "reject" = Left Reject
@@ -206,9 +252,9 @@ lexState stateList s = if Normal s `elem` stateList
     then Left (Normal s)
     else Right ("State not found in statelist: '" ++ s ++ "'")
 
-
 {-
-parse: parses a specification file into a list of tokens
+parse 
+Parses a specification file into a list of tokens
 -}
 parseSpecification :: String -> Either ErrMsg Specification
 parseSpecification spec = do
@@ -224,7 +270,10 @@ parseSpecification spec = do
         Right errMsg -> Left errMsg
     return (Spec alphabet (Accept:Reject:states) transitions)
 
-
+{-
+extractSections
+Extracts the alphabet, states, and transitions sections from a list of lines.
+-}
 extractSections :: [String] -> (String, String, [String])
 extractSections [] = ("", "", [])
 extractSections (line:rest)
@@ -235,178 +284,97 @@ extractSections (line:rest)
     where
         (alphabetSection, statesSection, transitions) = extractSections rest
 
-containsabc :: String
-containsabc = 
-    "alphabet:a,b,c\n" ++
-    "states:q0,q1,q2\n" ++
-    "transitions:\n" ++
-    "q0 | a | _ | > | q1\n" ++ 
-    "q0 | b | _ | > | q0\n" ++ 
-    "q0 | c | _ | > | q0\n" ++ 
-    "q0 | _ | _ | _ | reject\n" ++
-    "q1 | b | _ | > | q2\n" ++
-    "q1 | a | _ | > | q1\n" ++
-    "q1 | c | _ | > | q0\n" ++
-    "q1 | _ | _ | _ | reject\n" ++
-    "q2 | c | _ | > | accept\n" ++
-    "q2 | a | _ | > | q1\n" ++
-    "q2 | b | _ | > | q0\n" ++
-    "q2 | _ | _ | _ | reject"
+
+
+
+
+
+{---------------------------------------------------
+SIMULATION FUNCTIONS
+---------------------------------------------------}
 
 {-
-    simulateTMWithLimit
+simulateTMWithLimit
+Simulates a Turing machine with a maximum number of steps.
 -}
 simulateTMWithLimit :: Specification -> State -> Tape -> Int -> Either ErrMsg (State, Tape)
 simulateTMWithLimit (Spec alphabet states transitions) currentState tape steps
-  | steps <= 0 = Left "Exceeded maximum steps"
-  | currentState == Accept || currentState == Reject = Right (currentState, tape)
-  | otherwise =
-      let (left, currentSymbol, right) = tape
-      in case findTransition currentState currentSymbol transitions of
-        Just (_, _, writeSymbol, direction, nextState) ->
-          let newTape = moveTape direction (left, writeSymbol, right)
-          in simulateTMWithLimit (Spec alphabet states transitions) nextState newTape (steps - 1)
-        Nothing -> Left $ "Invalid transition for state '" ++ show currentState ++ "' and symbol '" ++ show currentSymbol ++ "'"
-
+    | steps <= 0 = Left "Exceeded maximum steps"
+    | currentState == Accept || currentState == Reject = Right (currentState, tape)
+    | otherwise =
+        let (left, currentSymbol, right) = tape
+        in case findTransition currentState currentSymbol transitions of
+            Just (_, _, writeSymbol, direction, nextState) ->
+                let newTape = moveTape direction (left, writeSymbol, right)
+                in simulateTMWithLimit (Spec alphabet states transitions) nextState newTape (steps - 1)
+            Nothing -> Left $ "Invalid transition for state '" ++ show currentState ++ "' and symbol '" ++ show currentSymbol ++ "'"
 
 {-
-    HELPER FUNCTIONS FOR SIMULATING A TURING MACHINE
+outputResult
+Takes the result of simulateTMWithLimit and outputs whether we accept or rejct string
 -}
-
---Function to find a transition in the TransitionTable
-findTransition :: State -> Symbol -> TransitionTable -> Maybe Transition
-findTransition state symbol = find (\(st, symbols, _, _, _) -> st == state && symbol == head [symbols])
-
---Function to move tape left, right or stay
-moveTape :: Direction -> Tape -> Tape
-moveTape L (ls, m, rs) = case ls of
-  [] -> ([], None, m:rs)
-  (l:ls':lss) -> ([l], ls', m:rs)
-moveTape R (ls, m, rs) = case rs of
-  [] -> (ls ++ [m], None, [])
-  (r:rs') -> (ls ++ [m], r, rs')
-moveTape S tape = tape
-
-
-{- validateInput :: Alphabet -> Tape -> Bool
-validateInput alphabet (left, currentSymbol, right) =
-  all (`elem` alphabet) (left ++ [currentSymbol] ++ right) -}
-
---Sets the inital tape based on input string 
-setInitialTape :: String -> Alphabet -> Tape
-setInitialTape input alphabet = ([], Sym (head input), map Sym (tail input))
-
---Gets the inital state which is the first state of the first transition in specificaiton
-getInitialState :: Specification -> State
-getInitialState (Spec _ _ transitions) = case transitions of
-  [] -> error "Invalid Specification: No transitions found"
-  ((initialState, _, _, _, _):_) -> initialState
-
---gets the alphabet from specification 
-getAlphabetFromSpecification :: Specification -> Alphabet
-getAlphabetFromSpecification (Spec alphabet _ _) = alphabet
-
---Takes the result of simulateTMWithLimit and outputs whether we accept or rejct string
 outputResult :: Either ErrMsg (State, Tape) -> String
 outputResult (Left errMsg) = "Error: " ++ errMsg
 outputResult (Right (state, tape)) = case state of
-  Accept -> "Accepted."
-  Reject -> "Rejected"
-
---Turn either specification to specification to be passed into SimulateTMWithLimit
-extractSpecification :: Either ErrMsg Specification -> Specification
-extractSpecification (Right spec) = spec
-extractSpecification (Left errMsg) = error $ "Error extracting specification: " ++ errMsg
-
-
-
-
-
--- Add this at the end of your file or in the GHCi session
-
-testMoveTape :: IO ()
-testMoveTape = do
-  putStrLn "Testing moveTape function:"
-  
-  let tape1 = ([Sym 'a', Sym 'b'], Sym 'c', [Sym 'd', Sym 'e'])
-  let tape2 = moveTape L tape1
-  putStrLn $ "Move left: " ++ show tape2  -- Expect: (['a'], 'b', ['c', 'd', 'e'])
-
-  let tape3 = moveTape R tape1
-  putStrLn $ "Move right: " ++ show tape3  -- Expect: (['a', 'b', 'c'], 'd', ['e'])
-
-  let tape4 = moveTape S tape1
-  putStrLn $ "Stay in place: " ++ show tape4  -- Expect: (['a', 'b'], 'c', ['d', 'e'])
-
-
--- Add this at the end of your file or in the GHCi session
-
-testFindTransition :: IO ()
-testFindTransition = do
-  putStrLn "Testing findTransition function:"
-  
-  let transitions = [ (Normal "q0", Sym 'a', None, R, Normal "q1")
-                    , (Normal "q0", Sym 'b', None, R, Normal "q0")
-                    , (Normal "q1", Sym 'b', None, R, Normal "q2")
-                    , (Normal "q1", Sym 'a', None, R, Normal "q1")
-                    , (Normal "q2", Sym 'c', None, R, Accept)
-                    ]
-
-  putStrLn $ "Test 1: " ++ show (findTransition (Normal "q0") (Sym 'a') transitions)
-  -- Expect: Just (Normal "q0", Sym 'a', None, R, Normal "q1")
-
-  putStrLn $ "Test 2: " ++ show (findTransition (Normal "q1") (Sym 'b') transitions)
-  -- Expect: Just (Normal "q1", Sym 'b', None, R, Normal "q2")
-
-  putStrLn $ "Test 3: " ++ show (findTransition (Normal "q2") (Sym 'c') transitions)
-  -- Expect: Just (Normal "q2", Sym 'c', None, R, Accept)
-
-  putStrLn $ "Test 4: " ++ show (findTransition (Normal "q0") (Sym 'c') transitions)
-  -- Expect: Nothing
-
-
-
--- Add this at the end of your file or in the GHCi session
-
-testSimulateTMWithLimit :: IO ()
-testSimulateTMWithLimit = do
-  putStrLn "Testing simulateTMWithLimit function:"
-  
-  let alphabet = [Sym 'a', Sym 'b', Sym 'c']
-  let states = [Accept, Reject, Normal "q0", Normal "q1", Normal "q2"]
-  let transitions = [ (Normal "q0", Sym 'a', None, R, Normal "q1")
-                    , (Normal "q0", Sym 'b', None, R, Normal "q0")
-                    , (Normal "q0", Sym 'c', None, R, Normal "q0")
-                    , (Normal "q0", None, None, S, Reject)
-                    , (Normal "q1", Sym 'b', None, R, Normal "q2")
-                    , (Normal "q1", Sym 'a', None, R, Normal "q1")
-                    , (Normal "q1", Sym 'c', None, R, Normal "q0")
-                    , (Normal "q1", None, None, S, Reject)
-                    , (Normal "q2", Sym 'c', None, R, Accept)
-                    , (Normal "q2", Sym 'a', None, R, Normal "q1")
-                    , (Normal "q2", Sym 'b', None, R, Normal "q0")
-                    , (Normal "q2", None, None, S, Reject)
-                    ]
-  let specification = Spec alphabet states transitions
-
-  putStrLn $ "Spec: " ++ show specification
-  putStrLn $ "Test 1: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "abc" alphabet) 1000)
-  -- Expect: Right (Accept, (_, None, _))
-
-  putStrLn $ "Test 2: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "cba" alphabet) 1000)
-  -- Expect: Right (Reject, (_, None, _))
-
-  putStrLn $ "Test 3: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "ab" alphabet) 1000)
-  -- Expect: Left "Exceeded maximum steps" (since "ab" would not be accepted)
-
-  putStrLn $ "Test 4: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "aabc" alphabet) 1000)
-  -- Expect: Left "Exceeded maximum steps" (since the machine doesn't reach an accept or reject state in 1000 steps)
-
+    Accept -> "Accepted."
+    Reject -> "Rejected."
 
 {-
-General Helper Functions
+findTransition
+Function to find a transition in the TransitionTable
 -}
--- Splits a list on a delimiter
+findTransition :: State -> Symbol -> TransitionTable -> Maybe Transition
+findTransition state symbol = find (\(st, symbols, _, _, _) -> st == state && symbol == head [symbols])
+
+{-
+moveTape
+Function to move tape left, right or stay
+-}
+moveTape :: Direction -> Tape -> Tape
+moveTape L (ls, m, rs) = case ls of
+    [] -> ([], None, m:rs)
+    (l:ls':lss) -> ([l], ls', m:rs)
+moveTape R (ls, m, rs) = case rs of
+    [] -> (ls ++ [m], None, [])
+    (r:rs') -> (ls ++ [m], r, rs')
+moveTape S tape = tape
+
+{-
+setInitialTape
+Sets the inital tape based on input string 
+-}
+setInitialTape :: String -> Alphabet -> Tape
+setInitialTape input alphabet = ([], Sym (head input), map Sym (tail input))
+
+{-
+getInitialState
+Gets the inital state which is the first state of the first transition in specificaiton
+-}
+getInitialState :: Specification -> State
+getInitialState (Spec _ _ transitions) = case transitions of
+    [] -> error "Invalid Specification: No transitions found"
+    ((initialState, _, _, _, _):_) -> initialState
+
+{-
+getAlphabetFromSpecification 
+Gets the alphabet from specification 
+-}
+getAlphabetFromSpecification :: Specification -> Alphabet
+getAlphabetFromSpecification (Spec alphabet _ _) = alphabet
+
+
+
+
+
+
+{---------------------------------------------------
+GENERAL HELPER FUNCTIONS
+---------------------------------------------------}
+
+{-
+split
+Splits a string into a list of string based on a delimiter
+-}
 split :: Eq a => a -> [a] -> [[a]]
 split _ [] = [[]]
 split delim lst =
@@ -415,16 +383,38 @@ split delim lst =
         [] -> []
         (_:xs) -> split delim xs
 
--- Trim leading and trailing spaces from a string
+{-
+trim
+Removes whitespace from the beginning and end of a string
+-}
 trim :: String -> String
 trim = f . f where f = reverse . dropWhile (== ' ')
 
--- Checks if a list contains duplicates
+{-
+duplicates
+Checks if a list contains duplicates
+-}
 duplicates :: Eq a => [a] -> Bool
 duplicates [] = False
 duplicates (x:xs) = elem x xs || duplicates xs
 
--- Removes duplicates from a list
+{-
+removeDuplicates
+Removes duplicates from a list
+-}
 removeDuplicates :: Eq a => [a] -> [a]
 removeDuplicates [] = []
 removeDuplicates (x:xs) = x : removeDuplicates (filter (/= x) xs)
+
+{-
+readFileToString
+Helper function to read a file into a string. If the file doesn't exist, return an error message.
+-}
+readFileToString :: FilePath -> IO (Either String String)
+readFileToString filePath = do
+    fileExists <- doesFileExist filePath
+    if fileExists
+        then do
+            contents <- readFile filePath
+            return $ Right contents
+        else return $ Left "File doesn't exist or is inaccessible."
