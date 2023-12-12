@@ -251,15 +251,20 @@ containsabc =
 
 main :: IO ()
 main = do
-    let specResult = parseSpecification containsabc
-    case specResult of
-        Left errMsg -> putStrLn $ "Error parsing specification: " ++ errMsg
-        Right tmSpec -> do
-            putStrLn "Specification loaded successfully."
-            putStrLn "Enter input string: "
-            input <- getLine
-            let result = simulateTMWithLimit tmSpec (getInitialState tmSpec) (setInitialTape input (getAlphabetFromSpecification tmSpec)) 1000
-            putStrLn $ outputResult result
+  let specResult = parseSpecification containsabc
+  let spec = extractSpecification specResult
+
+  putStrLn "Specification loaded successfully."
+
+  -- Run the Turing machine with a specific input
+  putStrLn "Enter input string: "
+  input <- getLine
+  let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
+
+  -- Output the result in a format consistent with the tests
+  putStrLn $ "Result: " ++ outputResult result
+
+
 
 
 {-
@@ -267,8 +272,9 @@ simulateTMWithLimit
 -}
 
 getInitialState :: Specification -> State
-getInitialState (Spec _ (initialState:_) _) = initialState
-getInitialState _ = error "Invalid Specification: No initial state found"
+getInitialState (Spec _ _ transitions) = case transitions of
+  [] -> error "Invalid Specification: No transitions found"
+  ((initialState, _, _, _, _):_) -> initialState
 
 getAlphabetFromSpecification :: Specification -> Alphabet
 getAlphabetFromSpecification (Spec alphabet _ _) = alphabet
@@ -285,6 +291,7 @@ simulateTMWithLimit (Spec alphabet states transitions) currentState tape steps
           let newTape = moveTape direction (left, writeSymbol, right)
           in simulateTMWithLimit (Spec alphabet states transitions) nextState newTape (steps - 1)
         Nothing -> Left $ "Invalid transition for state '" ++ show currentState ++ "' and symbol '" ++ show currentSymbol ++ "'"
+
 
 
 
@@ -310,9 +317,8 @@ validateInput alphabet (left, currentSymbol, right) =
 setInitialTape :: String -> Alphabet -> Tape
 setInitialTape input alphabet = ([], Sym (head input), map Sym (tail input))
 
-displayTape :: Tape -> String
-displayTape (left, Sym currentSymbol, right) = reverse (map symbolToChar left) ++ [symbolToChar (Sym currentSymbol)] ++ map symbolToChar right
-
+{- displayTape :: Tape -> String
+displayTape (left, Sym currentSymbol, right) = reverse (map symbolToChar left) ++ [symbolToChar (Sym currentSymbol)] ++ map symbolToChar right -}
 
 symbolToChar :: Symbol -> Char
 symbolToChar (Sym c) = c
@@ -320,9 +326,99 @@ symbolToChar None = '_'
 
 outputResult :: Either ErrMsg (State, Tape) -> String
 outputResult (Left errMsg) = "Error: " ++ errMsg
-outputResult (Right (state, tape)) = "Final state: " ++ show state ++ "\nFinal tape: " ++ displayTape tape
+outputResult (Right (state, tape)) = case state of
+  Accept -> "Accepted."
+  Reject -> "Rejected"
 
 
+
+extractSpecification :: Either ErrMsg Specification -> Specification
+extractSpecification (Right spec) = spec
+extractSpecification (Left errMsg) = error $ "Error extracting specification: " ++ errMsg
+
+
+
+
+
+-- Add this at the end of your file or in the GHCi session
+
+testMoveTape :: IO ()
+testMoveTape = do
+  putStrLn "Testing moveTape function:"
+  
+  let tape1 = ([Sym 'a', Sym 'b'], Sym 'c', [Sym 'd', Sym 'e'])
+  let tape2 = moveTape L tape1
+  putStrLn $ "Move left: " ++ show tape2  -- Expect: (['a'], 'b', ['c', 'd', 'e'])
+
+  let tape3 = moveTape R tape1
+  putStrLn $ "Move right: " ++ show tape3  -- Expect: (['a', 'b', 'c'], 'd', ['e'])
+
+  let tape4 = moveTape S tape1
+  putStrLn $ "Stay in place: " ++ show tape4  -- Expect: (['a', 'b'], 'c', ['d', 'e'])
+
+
+-- Add this at the end of your file or in the GHCi session
+
+testFindTransition :: IO ()
+testFindTransition = do
+  putStrLn "Testing findTransition function:"
+  
+  let transitions = [ (Normal "q0", Sym 'a', None, R, Normal "q1")
+                    , (Normal "q0", Sym 'b', None, R, Normal "q0")
+                    , (Normal "q1", Sym 'b', None, R, Normal "q2")
+                    , (Normal "q1", Sym 'a', None, R, Normal "q1")
+                    , (Normal "q2", Sym 'c', None, R, Accept)
+                    ]
+
+  putStrLn $ "Test 1: " ++ show (findTransition (Normal "q0") (Sym 'a') transitions)
+  -- Expect: Just (Normal "q0", Sym 'a', None, R, Normal "q1")
+
+  putStrLn $ "Test 2: " ++ show (findTransition (Normal "q1") (Sym 'b') transitions)
+  -- Expect: Just (Normal "q1", Sym 'b', None, R, Normal "q2")
+
+  putStrLn $ "Test 3: " ++ show (findTransition (Normal "q2") (Sym 'c') transitions)
+  -- Expect: Just (Normal "q2", Sym 'c', None, R, Accept)
+
+  putStrLn $ "Test 4: " ++ show (findTransition (Normal "q0") (Sym 'c') transitions)
+  -- Expect: Nothing
+
+
+
+-- Add this at the end of your file or in the GHCi session
+
+testSimulateTMWithLimit :: IO ()
+testSimulateTMWithLimit = do
+  putStrLn "Testing simulateTMWithLimit function:"
+  
+  let alphabet = [Sym 'a', Sym 'b', Sym 'c']
+  let states = [Accept, Reject, Normal "q0", Normal "q1", Normal "q2"]
+  let transitions = [ (Normal "q0", Sym 'a', None, R, Normal "q1")
+                    , (Normal "q0", Sym 'b', None, R, Normal "q0")
+                    , (Normal "q0", Sym 'c', None, R, Normal "q0")
+                    , (Normal "q0", None, None, S, Reject)
+                    , (Normal "q1", Sym 'b', None, R, Normal "q2")
+                    , (Normal "q1", Sym 'a', None, R, Normal "q1")
+                    , (Normal "q1", Sym 'c', None, R, Normal "q0")
+                    , (Normal "q1", None, None, S, Reject)
+                    , (Normal "q2", Sym 'c', None, R, Accept)
+                    , (Normal "q2", Sym 'a', None, R, Normal "q1")
+                    , (Normal "q2", Sym 'b', None, R, Normal "q0")
+                    , (Normal "q2", None, None, S, Reject)
+                    ]
+  let specification = Spec alphabet states transitions
+
+  putStrLn $ "Spec: " ++ show specification
+  putStrLn $ "Test 1: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "abc" alphabet) 1000)
+  -- Expect: Right (Accept, (_, None, _))
+
+  putStrLn $ "Test 2: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "cba" alphabet) 1000)
+  -- Expect: Right (Reject, (_, None, _))
+
+  putStrLn $ "Test 3: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "ab" alphabet) 1000)
+  -- Expect: Left "Exceeded maximum steps" (since "ab" would not be accepted)
+
+  putStrLn $ "Test 4: " ++ show (simulateTMWithLimit specification (Normal "q0") (setInitialTape "aabc" alphabet) 1000)
+  -- Expect: Left "Exceeded maximum steps" (since the machine doesn't reach an accept or reject state in 1000 steps)
 
 
 {-
