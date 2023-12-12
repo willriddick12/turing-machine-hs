@@ -27,17 +27,22 @@ helpMessage = "Commands:\n\
     \tv - Test verbosely\n\
     \q  - Quit"
 
-{- main :: IO ()
+main :: IO ()
 main = do
-    let initialSpec = Spec [] [] [] -- Initial empty specification
-    let loadedSpec = initialSpec    -- Define a variable to hold loaded specification
+    putStrLn "\nWelcome to Turing Machine Simulator, enter 'h' for help."
+    mainLoop (Spec [] [] [])
 
+mainLoop :: Specification -> IO ()
+mainLoop loadedSpec = do
+    let initialSpec = Spec [] [] [] -- Initial empty specification
+    
     putStr "> "
     command <- getLine
-    case command of
+    case (trim command) of
         -- HELP
-        "h" -> putStrLn helpMessage 
-        "help" -> putStrLn helpMessage 
+        "h" -> do
+            putStrLn helpMessage 
+            mainLoop loadedSpec
         
         -- LOAD
         "l" -> do
@@ -47,36 +52,42 @@ main = do
             putStrLn ("Loading file: " ++ filePath)
             fileContent <- readFileToString filePath
 
-            let loadedSpec = case fileContent of
-                    Left errMsg -> initialSpec -- Assign initialSpec in case of error
-                    Right contents ->
-                        case parseSpecification contents of
-                            Left errMsg -> initialSpec -- Assign initialSpec in case of parsing error
-                            Right parsedSpec -> parsedSpec -- Assign parsed specification to newLoadedSpec
-
             case fileContent of
-                Left errMsg -> putStrLn $ "Error loading file: " ++ errMsg
-                Right _ -> do
-                    putStrLn "Specification loaded successfully."
-
+                Left errMsg -> do
+                    putStrLn $ "Error loading file: " ++ errMsg
+                    mainLoop initialSpec -- In case of file error, return initial spec
+                Right contents -> do
+                    putStrLn "Specification found."
+                    case parseSpecification contents of
+                        Left errMsg -> do
+                            putStrLn $ "Specification not loaded: \n" ++ errMsg
+                            mainLoop initialSpec -- In case of parsing error, return initial spec
+                        Right parsedSpec -> do
+                            mainLoop parsedSpec
 
         -- TEST
         "t" -> do
-            putStrLn "Enter input string: "
-            putStr "> "
-            input <- getLine
-
             case loadedSpec of 
                 Spec [] [] [] -> putStrLn "No specification file loaded."
                 spec -> do
+                    putStrLn "Enter input string: "
+                    putStr "> "
+                    input <- getLine
+
+                    putStrLn $ "Testing input string: " ++ show input
+                    {-
                     let result = simulateTuringMachine spec input
                     putStrLn $ if result 
                         then "Accepted: " ++ input 
                         else "Rejected: " ++ input
+                        -}
+            
+            mainLoop loadedSpec
 
         -- TEST VERBOSELY
         "tv" -> do
             putStrLn "Not implemented" 
+            mainLoop loadedSpec
 
         -- QUIT
         "q" -> do 
@@ -84,40 +95,40 @@ main = do
             return()
         
         -- UNKNOWN COMMAND 
-        unknown -> putStrLn ("Unknown command: '" ++ unknown ++ "'") 
-
-    -- LOOP
-    main -}
+        unknown -> do 
+            putStrLn ("Unknown command: '" ++ unknown ++ "'") 
+            mainLoop loadedSpec
             
-main :: IO ()
-main = do
-  let specResult = parseSpecification containsabc
-  let spec = extractSpecification specResult
 
-  putStrLn "Specification loaded successfully."
-
-  -- Run the Turing machine with a specific input
-  putStrLn "Enter input string: "
-  input <- getLine
-  let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
-
-  -- Output the result in a format consistent with the tests
-  putStrLn $ "Result: " ++ outputResult result
         
-    
 readFileToString :: FilePath -> IO (Either String String)
 readFileToString filePath = do
     fileExists <- doesFileExist filePath
     if fileExists
         then do
-            handle <- openFile filePath ReadMode
-            contents <- hGetContents handle
-            hClose handle
+            contents <- readFile filePath
             return $ Right contents
         else return $ Left "File doesn't exist or is inaccessible."
 
 
 
+
+{-
+main :: IO ()
+main = do
+    let specResult = parseSpecification containsabc
+    let spec = extractSpecification specResult
+
+    putStrLn "Specification loaded successfully."
+
+    -- Run the Turing machine with a specific input
+    putStrLn "Enter input string: "
+    input <- getLine
+    let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
+
+    -- Output the result in a format consistent with the tests
+    putStrLn $ "Result: " ++ outputResult result
+-}
 {-
 parseAlphabet: parses a csv of symbols converting them to an Alphabet
 -}

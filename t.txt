@@ -1,0 +1,15 @@
+alphabet:a,b,c
+states:q0,q1,q2
+transitions:
+q0 | a | _ | > | q1
+q0 | b | _ | > | q0
+q0 | c | _ | > | q0
+q0 | _ | _ | _ | reject
+q1 | b | _ | > | q2
+q1 | a | _ | > | q1
+q1 | c | _ | > | q0
+q1 | _ | _ | _ | reject
+q2 | c | _ | > | accept
+q2 | a | _ | > | q1
+q2 | b | _ | > | q0
+q2 | _ | _ | _ | reject
