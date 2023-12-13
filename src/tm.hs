@@ -1,4 +1,6 @@
--- IMPORTS
+{-
+imports
+-}
 import Data.List
 import Data.Char
 import Data.Either
@@ -6,6 +8,9 @@ import Data.Maybe
 import System.IO
 import System.Directory (doesFileExist)
 
+{-
+type and data definitions
+-}
 type ErrMsg = String
 data Symbol = Sym Char | None deriving (Show, Eq) -- None is the blank symbol, it will not write to the tape
 type Alphabet = [Symbol] 
@@ -56,15 +61,18 @@ mainLoop loadedSpec = do
 
             case fileContent of
                 Left errMsg -> do
+                    -- In case of file error, return initial spec
                     putStrLn $ "Error loading file: " ++ errMsg
-                    mainLoop initialSpec -- In case of file error, return initial spec
+                    mainLoop initialSpec 
                 Right contents -> do
                     putStrLn "Specification found."
                     case parseSpecification contents of
                         Left errMsg -> do
+                            -- In case of parsing error, return initial spec
                             putStrLn $ "Specification not loaded: \n" ++ errMsg
-                            mainLoop initialSpec -- In case of parsing error, return initial spec
+                            mainLoop initialSpec 
                         Right parsedSpec -> do
+                            putStrLn "Specification loaded."
                             mainLoop parsedSpec
 
         -- TEST
@@ -78,13 +86,10 @@ mainLoop loadedSpec = do
                     putStr "> "
                     input <- getLine
                     putStrLn $ "Testing input string: " ++ show input
-
                     -- Run the Turing machine with a specific input
                     let result = simulateTMWithLimit spec (getInitialState spec) (setInitialTape input (getAlphabetFromSpecification spec)) 1000
-
                     -- Output the result in a format consistent with the tests
                     putStrLn $ "Result: " ++ outputResult result
-            
                     mainLoop loadedSpec
 
         -- TEST VERBOSELY
